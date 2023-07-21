@@ -27,49 +27,6 @@ LOG = logging.getLogger(NAME)
 CONFIG = None
 
 
-@app.get('/customer/<string:customer_id>')
-def get_customer(customer_id):
-    projects = get_projects(customer_id)
-    json = jsonify({'customer': customer_id,
-                    'projects': projects})
-    return json
-
-@app.get('/project/<string:project_id>')
-def get_project(project_id):
-    json = jsonify({'project': project_id})
-    return json
-
-
-def get_projects(source="keystone", customer=None):
-    """here we would have to ask odoo or something like that. out of scope"""
-    return jsonify({})
-
-
-def _get_servers(project):
-    return {}
-
-
-def _get_volumes(project):
-    return {}
-
-
-def _get_attached_volumes(server):
-    return {}
-
-
-def _get_floating_ips(project):
-    return {}
-
-
-def _get_images(project):
-    return {}
-
-
-def push_json(data):
-    json = jsonify(data)
-    return True
-
-
 @app.route('/post_json', methods=['POST'])
 def process_json():
     content_type = request.headers.get('Content-Type')
