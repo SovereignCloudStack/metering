@@ -1,25 +1,41 @@
-# openstack_metering
+# Metering Sink
 
-This Tool is an endpoint for ceilometers http/json pipeline publisher.
-It consumes raw Ceilometer data, and provides a library easy build plugins to send billing related metrics to the wanted billing administration.
+This tool is a proof-of-concept for directly using Ceilometer HTTP/JSON
+publisher data to implement metering for the purposes of billing customers for
+resource usage.
 
-already existing plugins are
+The motivation is that many cloud service providers these days go beyond just
+IaaS (or IaaS may even just be a means to an end, e.g. for PaaS offerings on
+top). This generally implies that built-in end-to-end mechanisms in OpenStack
+for billing may not be adequate or there already exist platforms which handle
+the billing process which must be integrated into OpenStack.
 
-* odoo sales-order interface
-* simple textfile output
+The OpenStack Ceilometer project collects resource usage information from event
+and polled data throughout OpenStack. It provides this usage data to a
+"web hook" (HTTP publisher) in realtime.
 
-**_since this tool is still a PoC it is not recommended to use it in produktion.
-Also, not all openstack resources can be processed yet._**
+The tool in this repository uses this data to decompose and process it and
+write it into any of the pluggable backends.
+
+**Note:** This tool is in a proof-of-concept stage.
+
+Currently, two plugins exist:
+
+* The odoo plugin which writes to an Odoo sales-order
+* A simple textfile output for debugging purposes.
+
+## Usage
 
 To use the api just start it with
 ```shell
-$ python metering_api.py
+$ python -m metersink
 ```
 
-For usage please consult
+For usage please consult:
+
 ```shell
-$ python metering_api.py -python
-usage: metering_api.py [-h] [--config CONFIG_FILE] [-v]
+$ python -m metersink -h
+usage: __main__.py [-h] [--config CONFIG_FILE] [-v]
 
 options:
   -h, --help            show this help message and exit
@@ -29,8 +45,8 @@ options:
 
 ```
 
-For further configuration on billing endpoints and how to process incoming Data, just create a "settings.conf" file like this
-```shell
-$ cp settings_template.conf settings.conf
-```
-and edit it to your needs.
+## Configuration
+
+Refer to `settings_template.conf` for additional documentation on the
+configuration. Copy the template and pass the path to the copy via the `-c`
+command line flag to use it.
