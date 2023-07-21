@@ -2,26 +2,33 @@ import configparser
 import re
 from datetime import datetime, timedelta
 
-from metersink.output_odoo import get_odoo_version, odoo_get, get_odoo_user_id, odoo_create, odoo_update
+from metersink.output_odoo import (
+    get_odoo_version,
+    odoo_get,
+    get_odoo_user_id,
+    odoo_create,
+    odoo_update,
+)
 from metersink.output_textfile import output_file
 
-from pprint import pprint, pformat
+from pprint import pprint
 
-def get_config(arguments):
+
+def get_config(path):
     """
     retrieves the config from the config file
     :return: config
     """
     _config = configparser.ConfigParser()
-    _config.read_file(open(arguments.config_file))
+    _config.read_file(open(path))
     defaults = _config.defaults()
 
-    if defaults.get('log_level') == "DEBUG":
+    if defaults.get("log_level") == "DEBUG":
         for section in _config.sections():
             print(section)
-            #print(_config.options(section))
+            # print(_config.options(section))
             for option in _config[section]:
-                print(option, ':', _config.get(section, option))
+                print(option, ":", _config.get(section, option))
     return _config
 
 
@@ -34,34 +41,35 @@ def get_config_section(_config, section=None):
             for option in _config.options(section):
                 if option in defaults:
                     continue
-                values = [v for v in _config.get(section, option).splitlines() if v.strip()]
+                values = [
+                    v for v in _config.get(section, option).splitlines() if v.strip()
+                ]
                 if len(values):
                     section_dict[option] = values
         return section_dict
 
 
 def get_sinks(conf):
-    section = 'output'
+    section = "output"
     section_dict = get_config_section(conf, section=section)
     output_dict = {}
     for key, value in section_dict.items():
         if conf.has_option(section, key):
-            if conf.get(section,key) not in ['false', 'False']:
-                output_dict[key] = {
-                    'name': section_dict[key]
-                }
+            if conf.get(section, key) not in ["false", "False"]:
+                output_dict[key] = {"name": section_dict[key]}
 
-    for sink_name, values  in output_dict.items():
+    for sink_name, values in output_dict.items():
         sink_conf = get_config_section(conf, sink_name)
         for key, value in sink_conf.items():
             output_dict[sink_name][key] = value
 
     return output_dict
 
+
 def get_time(param):
-    if param == 'month_start':
+    if param == "month_start":
         _time = datetime.today().replace(day=1)
-    elif param == 'month_end':
+    elif param == "month_end":
         next_month = datetime.today().replace(day=28) + timedelta(days=4)
         _time = next_month - timedelta(days=next_month.day)
     else:
@@ -71,9 +79,9 @@ def get_time(param):
 
 def calculate_cloud_time(value1, value2=None):
     if not value2:
-        value2 = get_time('month_end')
+        value2 = get_time("month_end")
 
-    delta = value2 - datetime.strptime(value1, '%Y-%m-%dT%H:%M:%S')
+    delta = value2 - datetime.strptime(value1, "%Y-%m-%dT%H:%M:%S")
     value = int(round(delta.total_seconds() / 60))
     print(value)
 
@@ -102,18 +110,17 @@ def get_info_from_name(display_name):
 
 
 def get_name_from_info(info):
-
     display_name = f"{info['uuid']}\n{info['name']}\n({info['values']})\n{info['start']} - {info['end']}"
     return display_name
 
 
 def message_to_dict(message):
-    traits = message['traits']
+    traits = message["traits"]
     traits_dict = {}
     for trait in traits:
         traits_dict[trait[0]] = trait[2]
     data_dict = message
-    data_dict['traits'] = traits_dict
+    data_dict["traits"] = traits_dict
     return data_dict
 
 
@@ -121,31 +128,31 @@ def push_to_sinks(conf, data):
     sinks = get_sinks(conf)
     pprint(sinks)
     for sink_type, sink_values in sinks.items():
-        if sink_type == 'file':
-            for index, sink_name in enumerate(sinks['file']['name']):
+        if sink_type == "file":
+            for index, sink_name in enumerate(sinks["file"]["name"]):
                 output_file(sink_name, data)
-        elif sink_type == 'odoo':
-            for index, sink_name in enumerate(sinks['odoo']['name']):
+        elif sink_type == "odoo":
+            for index, sink_name in enumerate(sinks["odoo"]["name"]):
                 odoo_version = get_odoo_version(sink_name)
                 if not odoo_version:
-                    raise Exception('The odoo endpoint could not be found.')
+                    raise Exception("The odoo endpoint could not be found.")
                 print(odoo_version)
-                odoo_conf = get_config_section(conf, section='odoo')
+                odoo_conf = get_config_section(conf, section="odoo")
 
                 odoo = {
-                    'url': sink_name,
-                    'db': odoo_conf['odoo_db'][index],
-                    'user_name': odoo_conf['odoo_user_name'][index],
-                    'password': odoo_conf['odoo_api_key'][index],
+                    "url": sink_name,
+                    "db": odoo_conf["odoo_db"][index],
+                    "user_name": odoo_conf["odoo_user_name"][index],
+                    "password": odoo_conf["odoo_api_key"][index],
                 }
-                odoo['user_id'] = get_odoo_user_id(odoo)
+                odoo["user_id"] = get_odoo_user_id(odoo)
 
                 print(odoo)
 
-                if data['event_type'].startswith('volume'):
-                    pprint(odoo_get(odoo, 'sale.order', mode='fields'))
-                    print('####################################')
-                    pprint(odoo_get(odoo, 'sale.order.line', mode='fields'))
+                if data["event_type"].startswith("volume"):
+                    pprint(odoo_get(odoo, "sale.order", mode="fields"))
+                    print("####################################")
+                    pprint(odoo_get(odoo, "sale.order.line", mode="fields"))
                     pprint(data)
 
                     # traits = data['traits']
@@ -153,85 +160,79 @@ def push_to_sinks(conf, data):
                     # for trait in traits:
                     #     traits_dict[trait[0]] = trait[2]
 
-
                     data_dict = message_to_dict(data)
 
                     # project_id = traits_dict['project_id']
-                    project_id = data_dict['traits']['project_id']
-                    filter_list = [[
-                        ['client_order_ref', '=', project_id],
-                        ['state', '=', 'sale']
-                    ]]
+                    project_id = data_dict["traits"]["project_id"]
+                    filter_list = [
+                        [["client_order_ref", "=", project_id], ["state", "=", "sale"]]
+                    ]
                     projection_dict = {
-                        'fields': ['id',
-                                   'user_id',
-                                   'type_name',
-                                   'visible_project',
-                                   'tag_ids',
-                                   'state',
-                                   'require_signature',
-                                   'require_payment',
-                                   'reference',
-                                   'project_ids',
-                                   'pricelist_id',
-                                   'partner_id',
-                                   'origin',
-                                   'order_line',
-                                   'name',
-                                   'id',
-                                   'display_name',
-                                   'create_uid',
-                                   'client_order_ref',
-                                   'invoice_ids'
-                                   ],
-                        'limit': 1
+                        "fields": [
+                            "id",
+                            "user_id",
+                            "type_name",
+                            "visible_project",
+                            "tag_ids",
+                            "state",
+                            "require_signature",
+                            "require_payment",
+                            "reference",
+                            "project_ids",
+                            "pricelist_id",
+                            "partner_id",
+                            "origin",
+                            "order_line",
+                            "name",
+                            "id",
+                            "display_name",
+                            "create_uid",
+                            "client_order_ref",
+                            "invoice_ids",
+                        ],
+                        "limit": 1,
                     }
 
-                    [sale_orders] = odoo_get(odoo, 'sale.order',
-                                           mode='records',
-                                           filter_list=filter_list,
-                                           projection_dict=projection_dict)
+                    [sale_orders] = odoo_get(
+                        odoo,
+                        "sale.order",
+                        mode="records",
+                        filter_list=filter_list,
+                        projection_dict=projection_dict,
+                    )
                     if not sale_orders:
                         line_dict = {
-                            'partner_id': 75,
-                            'client_order_ref': project_id,
-                            'require_payment': False,
-                            'require_signature': False,
-                            'tag_ids': ['cloud', project_id],
+                            "partner_id": 75,
+                            "client_order_ref": project_id,
+                            "require_payment": False,
+                            "require_signature": False,
+                            "tag_ids": ["cloud", project_id],
                         }
 
-                        sale_order_id = odoo_create(odoo, 'sale.order', [line_dict])
+                        sale_order_id = odoo_create(odoo, "sale.order", [line_dict])
 
                         end_date = datetime.now()
-                        time_calc = calculate_cloud_time(data_dict['traits']['created_at'], end_date)
-                        value_list = [
-                            str(data_dict['traits']['size'])
-                        ]
-
+                        time_calc = calculate_cloud_time(
+                            data_dict["traits"]["created_at"], end_date
+                        )
+                        value_list = [str(data_dict["traits"]["size"])]
 
                         info_dict = {
-                            'uuid': data_dict['traits']['resource_id'],
-                            'name': data_dict['traits']['display_name'],
-                            'values': value_list,
-                            'start': data_dict['traits']['created_at'],
-                            'end': end_date
+                            "uuid": data_dict["traits"]["resource_id"],
+                            "name": data_dict["traits"]["display_name"],
+                            "values": value_list,
+                            "start": data_dict["traits"]["created_at"],
+                            "end": end_date,
                         }
                         display_name = get_name_from_info(info_dict)
 
-
-
-
-
-
                         line_dict = {
-                            'product_id': 36,
-                            'display_name': display_name,
-                            'product_uom_qty': time_calc,
-                            'order_id': sale_order_id,
+                            "product_id": 36,
+                            "display_name": display_name,
+                            "product_uom_qty": time_calc,
+                            "order_id": sale_order_id,
                         }
-                        line_id = odoo_create(odoo, 'sale.order.line', [line_dict])
-
-
+                        line_id = odoo_create(odoo, "sale.order.line", [line_dict])
 
                     else:
                         pprint(sale_orders)
@@ -241,12 +242,13 @@ def push_to_sinks(conf, data):
                         # line_ids = sale_orders['order_line']
                         # pprint(line_ids)
                         projection_dict = {
-                            'fields': ['id',
-                                       #'product_id',
-                                       #'display_name',
-                                       #'product_uom_qty',
-                                       #'order_id'
-                                       ]
+                            "fields": [
+                                "id",
+                                #'product_id',
+                                #'display_name',
+                                #'product_uom_qty',
+                                #'order_id'
+                            ]
                         }
 
                         # line_records = odoo_get(odoo, 'sale.order.line',
@@ -255,13 +257,18 @@ def push_to_sinks(conf, data):
                         #                         # projection_dict=projection_dict
                         #                         )
 
-                        line_record = odoo_get(odoo, 'sale.order.line',
-                                                mode='search_read',
-                                                filter_list=[[
-                                                    ['order_id', '=', sale_orders['id']],
-                                                    ['product_id', '=', 36]]],
-                                                # projection_dict=projection_dict
-                                                )
+                        line_record = odoo_get(
+                            odoo,
+                            "sale.order.line",
+                            mode="search_read",
+                            filter_list=[
+                                [
+                                    ["order_id", "=", sale_orders["id"]],
+                                    ["product_id", "=", 36],
+                                ]
+                            ],
+                            # projection_dict=projection_dict
+                        )
                         if line_record:
                             # todo update
                             """
@@ -271,34 +278,33 @@ def push_to_sinks(conf, data):
 
                             pprint(line_record)
 
-
-                            time_calc = calculate_cloud_time(line_record['name'])
+                            time_calc = calculate_cloud_time(line_record["name"])
 
                             quantity = 3000
-                            odoo_update(odoo, 'sale.order.line', line_record['id'], {'product_uom_qty':quantity})
+                            odoo_update(
+                                odoo,
+                                "sale.order.line",
+                                line_record["id"],
+                                {"product_uom_qty": quantity},
+                            )
                             pass
                         else:
                             # for line_record in line_records:
                             #     pprint(line_record)
-                            #pprint(line_records)
+                            # pprint(line_records)
                             time_calc = 3000
 
-                            time_calc = calculate_cloud_time(data_dict['traits']['created_at'])
-
+                            time_calc = calculate_cloud_time(
+                                data_dict["traits"]["created_at"]
+                            )
 
                             line_dict = {
-                                'product_id': 36,
-                                'name': display_name,
-                                'product_uom_qty': time_calc,
-                                'order_id': sale_orders['id'],
+                                "product_id": 36,
+                                "name": display_name,
+                                "product_uom_qty": time_calc,
+                                "order_id": sale_orders["id"],
                             }
-                            line_id = odoo_create(odoo, 'sale.order.line', [line_dict])
+                            line_id = odoo_create(odoo, "sale.order.line", [line_dict])
 
-
-
-
-
-
-
-    #LOG.debug('%s', conf)
+    # LOG.debug('%s', conf)
     pass

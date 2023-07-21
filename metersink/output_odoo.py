@@ -6,14 +6,14 @@ from datetime import datetime
 from pprint import pprint
 
 
-def get_client(odoo, client='common'):
+def get_client(odoo, client="common"):
     """returns the client"""
-    if 'url' in odoo:
-        url = odoo['url']
+    if "url" in odoo:
+        url = odoo["url"]
     else:
         url = odoo
-    if client == 'models':
-        client = 'object'
+    if client == "models":
+        client = "object"
     client = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/{client}")
     return client
 
@@ -25,7 +25,7 @@ def get_odoo_version(url):
         version = common.version()
         return version
     except xmlrpc.client.ProtocolError:
-        print('there was an error connecting to odoo')
+        print("there was an error connecting to odoo")
     return None
 
 
@@ -39,36 +39,44 @@ def odoo_get(odoo, model, mode="ids", filter_list=None, projection_dict=None):
 
     if mode == "records":
         mode = "search_read"
-    elif mode == 'fields':
-        mode = 'fields_get'
-        projection_dict = {'attributes': ['string', 'help', 'type']}
-    elif mode == 'ids':
+    elif mode == "fields":
+        mode = "fields_get"
+        projection_dict = {"attributes": ["string", "help", "type"]}
+    elif mode == "ids":
         mode = "search"
-    elif mode == 'rights':
-        mode = 'check_access_rights'
+    elif mode == "rights":
+        mode = "check_access_rights"
 
     # print(model, mode, filter_list, projection_dict)
-    models = get_client(odoo, client='models')
+    models = get_client(odoo, client="models")
 
     # todo make that less ugly
     if not projection_dict:
         records = models.execute_kw(
-            odoo['db'], odoo['user_id'], odoo['password'], model, mode, filter_list
+            odoo["db"], odoo["user_id"], odoo["password"], model, mode, filter_list
         )
         # projection_dict = {}
     else:
         records = models.execute_kw(
-            odoo['db'], odoo['user_id'], odoo['password'],
-            model, mode, filter_list, projection_dict
+            odoo["db"],
+            odoo["user_id"],
+            odoo["password"],
+            model,
+            mode,
+            filter_list,
+            projection_dict,
         )
     return records
 
 
 def get_sales_orders(odoo, filter_list=None, projection_dict=None):
-    sale_orders = odoo_get(odoo, 'sale.order',
-                  mode='records',
-                  filter_list=filter_list,
-                  projection_dict=projection_dict)
+    sale_orders = odoo_get(
+        odoo,
+        "sale.order",
+        mode="records",
+        filter_list=filter_list,
+        projection_dict=projection_dict,
+    )
     return sale_orders
 
 
@@ -76,9 +84,10 @@ def odoo_create(odoo, model, record_list):
     """
     creates a record in odoo and returns its id
     """
-    models = get_client(odoo, client='models')
-    record_id = models.execute_kw(odoo['db'], odoo['user_id'], odoo['password'],
-                                  model, 'create', record_list)
+    models = get_client(odoo, client="models")
+    record_id = models.execute_kw(
+        odoo["db"], odoo["user_id"], odoo["password"], model, "create", record_list
+    )
     return record_id
 
 
@@ -91,9 +100,15 @@ def odoo_update(odoo, model, record_id, data_dict):
     :param data_dict:
     :return: record_id
     """
-    models = get_client(odoo, client='models')
-    record_id = models.execute_kw(odoo['db'], odoo['user_id'], odoo['password'],
-                                  model, 'write', [[record_id], data_dict])
+    models = get_client(odoo, client="models")
+    record_id = models.execute_kw(
+        odoo["db"],
+        odoo["user_id"],
+        odoo["password"],
+        model,
+        "write",
+        [[record_id], data_dict],
+    )
     return record_id
 
 
@@ -103,27 +118,22 @@ def get_odoo_user_id(odoo):
     """
     try:
         common = get_client(odoo)
-        user_id = common.authenticate(odoo['db'],
-                                      odoo['user_name'],
-                                      odoo['password'],
-                                      {})
+        user_id = common.authenticate(
+            odoo["db"], odoo["user_name"], odoo["password"], {}
+        )
         return user_id
     except xmlrpc.client.ProtocolError:
-        print('there was an error connecting to odoo')
+        print("there was an error connecting to odoo")
     except OSError:
-        print('there was an error connecting to odoo')
+        print("there was an error connecting to odoo")
     return None
 
 
 def get_odoo_partner(odoo, filter_list=None, projection_dict=None):
-
-    partner = odoo_get(odoo,
-                       'res.partner',
-                       filter_list=filter_list,
-                       projection_dict=projection_dict
-                       )
+    partner = odoo_get(
+        odoo, "res.partner", filter_list=filter_list, projection_dict=projection_dict
+    )
     return partner
-
 
 
 # def get_account_id(odoo, tw_tag_list):
@@ -164,7 +174,6 @@ def get_odoo_partner(odoo, filter_list=None, projection_dict=None):
 #             break
 #     # print(project_id)
 #     return project_id
-
 
 
 # def create_line_in_odoo_from_time_tracking_data(odoo, line):
@@ -242,7 +251,7 @@ def create_flavor_produkt(data):
     pass
 
 
-def is_in_odoo(odoo, model='account.analytic.line', line=None, filter_dict=None):
+def is_in_odoo(odoo, model="account.analytic.line", line=None, filter_dict=None):
     """
     looks for already existing entries.
     """
@@ -250,26 +259,28 @@ def is_in_odoo(odoo, model='account.analytic.line', line=None, filter_dict=None)
     if not filter_dict:
         filter_dict = {}
 
-    filter_dict['date'] = str(datetime.date(line['start']))[:10]
-    filter_dict['name'] = 'TimeWarrior import ' + get_hash(line['start'])
-    filter_dict['employee_id'] = get_employee_id(odoo)
+    filter_dict["date"] = str(datetime.date(line["start"]))[:10]
+    filter_dict["name"] = "TimeWarrior import " + get_hash(line["start"])
+    filter_dict["employee_id"] = get_employee_id(odoo)
 
     filter_list = []
     for key, value in filter_dict.items():
-        filter_list.append([key, '=', value])
+        filter_list.append([key, "=", value])
 
-    project_id = get_project_id(odoo, line['tags'])
+    project_id = get_project_id(odoo, line["tags"])
 
     if not project_id:
         return False
-    project = ['project_id.id', '=', project_id]
+    project = ["project_id.id", "=", project_id]
     filter_list.append(project)
 
-    records = odoo_get(odoo, 'account.analytic.line',
-                       mode="records",
-                       filter_list=[filter_list],
-                       projection_dict={'limit': 1}
-                       )
+    records = odoo_get(
+        odoo,
+        "account.analytic.line",
+        mode="records",
+        filter_list=[filter_list],
+        projection_dict={"limit": 1},
+    )
     if records:
         # print('######### found records')
         # print(records)
