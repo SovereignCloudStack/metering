@@ -11,7 +11,7 @@ from flask import Flask, request, jsonify, json
 
 from pprint import pprint, pformat
 
-from metering_lib import *
+from metersink.lib import *
 
 app = Flask(__name__)
 NAME = 'billing_api'
@@ -91,14 +91,6 @@ def process_json():
 
 
 def main():
-    logging.info('starting the billing api server')
-    app.run(
-        port=8088,
-        debug=True,
-    )
-
-
-if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', '-c',
                         # type=argparse.FileType('r'),
@@ -112,5 +104,8 @@ if __name__ == '__main__':
         LOG.setLevel(logging.DEBUG)
 
     CONFIG = get_config(args)
-    main()
-
+    logging.info('starting the billing api server')
+    app.run(
+        port=8088,
+        debug=True,
+    )

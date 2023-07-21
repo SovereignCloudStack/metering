@@ -2,8 +2,8 @@ import configparser
 import re
 from datetime import datetime, timedelta
 
-from odoo_lib import get_odoo_version, odoo_get, get_odoo_user_id, odoo_create, odoo_update
-from output import output_file
+from metersink.output_odoo import get_odoo_version, odoo_get, get_odoo_user_id, odoo_create, odoo_update
+from metersink.output_textfile import output_file
 
 from pprint import pprint, pformat
 
