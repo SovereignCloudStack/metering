@@ -1,9 +1,11 @@
 """
 Library to find odoo related functions
 """
+import logging
 import xmlrpc.client
 from datetime import datetime
-from pprint import pprint
+
+LOG = logging.getLogger(__name__)
 
 
 def get_client(odoo, client="common"):
@@ -25,7 +27,7 @@ def get_odoo_version(url):
         version = common.version()
         return version
     except xmlrpc.client.ProtocolError:
-        print("there was an error connecting to odoo")
+        LOG.exception("failed to obtain odoo version")
     return None
 
 
@@ -47,7 +49,6 @@ def odoo_get(odoo, model, mode="ids", filter_list=None, projection_dict=None):
     elif mode == "rights":
         mode = "check_access_rights"
 
-    # print(model, mode, filter_list, projection_dict)
     models = get_client(odoo, client="models")
 
     # todo make that less ugly
@@ -122,10 +123,8 @@ def get_odoo_user_id(odoo):
             odoo["db"], odoo["user_name"], odoo["password"], {}
         )
         return user_id
-    except xmlrpc.client.ProtocolError:
-        print("there was an error connecting to odoo")
-    except OSError:
-        print("there was an error connecting to odoo")
+    except (OSError, xmlrpc.client.ProtocolError):
+        LOG.exception("failed to get user ID from odoo")
     return None
 
 
@@ -282,7 +281,5 @@ def is_in_odoo(odoo, model="account.analytic.line", line=None, filter_dict=None)
         projection_dict={"limit": 1},
     )
     if records:
-        # print('######### found records')
-        # print(records)
         return True
     return False

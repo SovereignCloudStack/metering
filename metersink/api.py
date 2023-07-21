@@ -57,7 +57,7 @@ def main():
     if args.verbose:
         LOG.setLevel(logging.DEBUG)
 
-    CONFIG = get_config(args)
+    CONFIG = get_config(args.config_file)
     logging.info("starting the billing api server")
     app.run(
         port=8088,

@@ -1,4 +1,5 @@
 import configparser
+import logging
 import re
 from datetime import datetime, timedelta
 
@@ -11,7 +12,21 @@ from metersink.output_odoo import (
 )
 from metersink.output_textfile import output_file
 
-from pprint import pprint
+from pprint import pformat
+
+
+LOG = logging.getLogger(__name__)
+
+
+def dump_config(cfg):
+    """
+    Emit a config dump to the DEBUG log level.
+    """
+    LOG.debug("Config dump")
+    for section in cfg.sections():
+        LOG.debug("Section %s", section)
+        for option in cfg[section]:
+            LOG.debug("[%s]  %s = %s", section, option, cfg.get(section, option))
 
 
 def get_config(path):
@@ -19,17 +34,10 @@ def get_config(path):
     retrieves the config from the config file
     :return: config
     """
-    _config = configparser.ConfigParser()
-    _config.read_file(open(path))
-    defaults = _config.defaults()
-
-    if defaults.get("log_level") == "DEBUG":
-        for section in _config.sections():
-            print(section)
-            # print(_config.options(section))
-            for option in _config[section]:
-                print(option, ":", _config.get(section, option))
-    return _config
+    cfg = configparser.ConfigParser()
+    cfg.read_file(open(path))
+    dump_config(cfg)
+    return cfg
 
 
 def get_config_section(_config, section=None):
@@ -83,7 +91,6 @@ def calculate_cloud_time(value1, value2=None):
 
     delta = value2 - datetime.strptime(value1, "%Y-%m-%dT%H:%M:%S")
     value = int(round(delta.total_seconds() / 60))
-    print(value)
 
     return value
 
@@ -126,7 +133,7 @@ def message_to_dict(message):
 
 def push_to_sinks(conf, data):
     sinks = get_sinks(conf)
-    pprint(sinks)
+    LOG.debug("pushing to sinks: %s", sinks)
     for sink_type, sink_values in sinks.items():
         if sink_type == "file":
             for index, sink_name in enumerate(sinks["file"]["name"]):
@@ -136,7 +143,7 @@ def push_to_sinks(conf, data):
                 odoo_version = get_odoo_version(sink_name)
                 if not odoo_version:
                     raise Exception("The odoo endpoint could not be found.")
-                print(odoo_version)
+                LOG.debug("Odoo version is %s", odoo_version)
                 odoo_conf = get_config_section(conf, section="odoo")
 
                 odoo = {
@@ -147,13 +154,15 @@ def push_to_sinks(conf, data):
                 }
                 odoo["user_id"] = get_odoo_user_id(odoo)
 
-                print(odoo)
-
                 if data["event_type"].startswith("volume"):
-                    pprint(odoo_get(odoo, "sale.order", mode="fields"))
-                    print("####################################")
-                    pprint(odoo_get(odoo, "sale.order.line", mode="fields"))
-                    pprint(data)
+                    if LOG.isEnabledFor(logging.DEBUG):
+                        LOG.debug(
+                            "%s", pformat(odoo_get(odoo, "sale.order", mode="fields"))
+                        )
+                        LOG.debug(
+                            "%s",
+                            pformat(odoo_get(odoo, "sale.order.line", mode="fields")),
+                        )
 
                     # traits = data['traits']
                     # traits_dict = {}
@@ -235,12 +244,12 @@ def push_to_sinks(conf, data):
                         line_id = odoo_create(odoo, "sale.order.line", [line_dict])
 
                     else:
-                        pprint(sale_orders)
+                        if LOG.isEnabledFor(logging.DEBUG):
+                            LOG.debug("%s", pformat(sale_orders))
 
                         display_name = f"{data_dict['traits']['resource_id']} ({data_dict['traits']['size']}GB)"
 
                         # line_ids = sale_orders['order_line']
-                        # pprint(line_ids)
                         projection_dict = {
                             "fields": [
                                 "id",
@@ -276,7 +285,8 @@ def push_to_sinks(conf, data):
                              between this line and the update message.
                             """
 
-                            pprint(line_record)
+                            if LOG.isEnabledFor(logging.DEBUG):
+                                LOG.debug("%s", pformat(line_record))
 
                             time_calc = calculate_cloud_time(line_record["name"])
 
@@ -289,9 +299,6 @@ def push_to_sinks(conf, data):
                             )
                             pass
                         else:
-                            # for line_record in line_records:
-                            #     pprint(line_record)
-                            # pprint(line_records)
                             time_calc = 3000
 
                             time_calc = calculate_cloud_time(
