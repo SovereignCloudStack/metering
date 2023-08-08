@@ -175,6 +175,10 @@ def get_odoo_partner(odoo, filter_list=None, projection_dict=None):
 #     return project_id
 
 
+def get_project(odoo, resource_object):
+    project = None
+    return project
+
 # def create_line_in_odoo_from_time_tracking_data(odoo, line):
 #     """
 #     takes the odo config and a dict and returns the line_id created by odoo on inserting the line
@@ -250,7 +254,7 @@ def create_flavor_produkt(data):
     pass
 
 
-def is_in_odoo(odoo, model="account.analytic.line", line=None, filter_dict=None):
+def is_in_odoo(odoo, model=None, line=None, filter_dict=None):
     """
     looks for already existing entries.
     """
@@ -259,14 +263,14 @@ def is_in_odoo(odoo, model="account.analytic.line", line=None, filter_dict=None)
         filter_dict = {}
 
     filter_dict["date"] = str(datetime.date(line["start"]))[:10]
-    filter_dict["name"] = "TimeWarrior import " + get_hash(line["start"])
-    filter_dict["employee_id"] = get_employee_id(odoo)
+    # filter_dict["name"] = "TimeWarrior import " + get_hash(line["start"])
+    # filter_dict["employee_id"] = get_employee_id(odoo)
 
     filter_list = []
     for key, value in filter_dict.items():
         filter_list.append([key, "=", value])
 
-    project_id = get_project_id(odoo, line["tags"])
+    project_id = get_project(odoo, line["tags"])
 
     if not project_id:
         return False
@@ -275,7 +279,7 @@ def is_in_odoo(odoo, model="account.analytic.line", line=None, filter_dict=None)
 
     records = odoo_get(
         odoo,
-        "account.analytic.line",
+        model=model,
         mode="records",
         filter_list=[filter_list],
         projection_dict={"limit": 1},

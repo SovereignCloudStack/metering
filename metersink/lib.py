@@ -17,7 +17,6 @@ from pprint import pformat
 
 LOG = logging.getLogger(__name__)
 
-
 def dump_config(cfg):
     """
     Emit a config dump to the DEBUG log level.
@@ -299,8 +298,9 @@ def push_to_sinks(conf, data):
                             )
                             pass
                         else:
-                            time_calc = 3000
-
+                            """
+                            If there is no line already for the ressource, create it.
+                            """
                             time_calc = calculate_cloud_time(
                                 data_dict["traits"]["created_at"]
                             )
@@ -312,6 +312,7 @@ def push_to_sinks(conf, data):
                                 "order_id": sale_orders["id"],
                             }
                             line_id = odoo_create(odoo, "sale.order.line", [line_dict])
+                            LOG.debug("%s", line_id)
 
     # LOG.debug('%s', conf)
     pass

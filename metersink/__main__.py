@@ -1,3 +1,3 @@
-from metersink.api import main
+from api import main
 
 main()
