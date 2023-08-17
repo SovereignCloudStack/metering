@@ -129,13 +129,177 @@ def message_to_dict(message):
     data_dict["traits"] = traits_dict
     return data_dict
 
+def odoo_handle_os_volumes(odoo, data):
+    if LOG.isEnabledFor(logging.DEBUG):
+        LOG.debug(
+            "%s", pformat(odoo_get(odoo, "sale.order", mode="fields"))
+        )
+        LOG.debug(
+            "%s",
+            pformat(odoo_get(odoo, "sale.order.line", mode="fields")),
+        )
+
+        # traits = data['traits']
+        # traits_dict = {}
+        # for trait in traits:
+        #     traits_dict[trait[0]] = trait[2]
+
+    data_dict = message_to_dict(data)
+
+    # project_id = traits_dict['project_id']
+    project_id = data_dict["traits"]["project_id"]
+    filter_list = [
+        [["client_order_ref", "=", project_id], ["state", "=", "sale"]]
+    ]
+    projection_dict = {
+        "fields": [
+            "id",
+            "user_id",
+            "type_name",
+            "visible_project",
+            "tag_ids",
+            "state",
+            "require_signature",
+            "require_payment",
+            "reference",
+            "project_ids",
+            "pricelist_id",
+            "partner_id",
+            "origin",
+            "order_line",
+            "name",
+            "id",
+            "display_name",
+            "create_uid",
+            "client_order_ref",
+            "invoice_ids",
+        ],
+        "limit": 1,
+    }
+
+    [sale_orders] = odoo_get(
+        odoo,
+        "sale.order",
+        mode="records",
+        filter_list=filter_list,
+        projection_dict=projection_dict,
+    )
+    if not sale_orders:
+        line_dict = {
+            "partner_id": 75,
+            "client_order_ref": project_id,
+            "require_payment": False,
+            "require_signature": False,
+            "tag_ids": ["cloud", project_id],
+        }
+
+        sale_order_id = odoo_create(odoo, "sale.order", [line_dict])
+
+        end_date = datetime.now()
+        time_calc = calculate_cloud_time(
+            data_dict["traits"]["created_at"], end_date
+        )
+        value_list = [str(data_dict["traits"]["size"])]
+
+        info_dict = {
+            "uuid": data_dict["traits"]["resource_id"],
+            "name": data_dict["traits"]["display_name"],
+            "values": value_list,
+            "start": data_dict["traits"]["created_at"],
+            "end": end_date,
+        }
+        display_name = get_name_from_info(info_dict)
+
+        line_dict = {
+            "product_id": 36,
+            "display_name": display_name,
+            "product_uom_qty": time_calc,
+            "order_id": sale_order_id,
+        }
+        line_id = odoo_create(odoo, "sale.order.line", [line_dict])
+
+    else:
+        if LOG.isEnabledFor(logging.DEBUG):
+            LOG.debug("%s", pformat(sale_orders))
+
+        display_name = f"{data_dict['traits']['resource_id']} ({data_dict['traits']['size']}GB)"
+
+        # line_ids = sale_orders['order_line']
+        projection_dict = {
+            "fields": [
+                "id",
+                # 'product_id',
+                # 'display_name',
+                # 'product_uom_qty',
+                # 'order_id'
+            ]
+        }
+
+        # line_records = odoo_get(odoo, 'sale.order.line',
+        #                         mode='read',
+        #                         filter_list=[line_ids],
+        #                         # projection_dict=projection_dict
+        #                         )
+
+        line_record = odoo_get(
+            odoo,
+            "sale.order.line",
+            mode="search_read",
+            filter_list=[
+                [
+                    ["order_id", "=", sale_orders["id"]],
+                    ["product_id", "=", 36],
+                ]
+            ],
+            # projection_dict=projection_dict
+        )
+        if line_record:
+            # todo update
+            """
+            we are reading the last state of the line and calculate the time
+             between this line and the update message.
+            """
+
+            if LOG.isEnabledFor(logging.DEBUG):
+                LOG.debug("%s", pformat(line_record))
+
+            time_calc = calculate_cloud_time(line_record["name"])
+
+            quantity = 3000
+            odoo_update(
+                odoo,
+                "sale.order.line",
+                line_record["id"],
+                {"product_uom_qty": quantity},
+            )
+            pass
+        else:
+            """
+            If there is no line already for the ressource, create it.
+            """
+            time_calc = calculate_cloud_time(
+                data_dict["traits"]["created_at"]
+            )
+
+            line_dict = {
+                "product_id": 36,
+                "name": display_name,
+                "product_uom_qty": time_calc,
+                "order_id": sale_orders["id"],
+            }
+            line_id = odoo_create(odoo, "sale.order.line", [line_dict])
+            LOG.debug("%s", line_id)
+
 
 def push_to_sinks(conf, data):
+    # LOG.debug('%s', conf)
     sinks = get_sinks(conf)
     LOG.debug("pushing to sinks: %s", sinks)
     for sink_type, sink_values in sinks.items():
         if sink_type == "file":
             for index, sink_name in enumerate(sinks["file"]["name"]):
+                # ToDo maybe we want to differ between events and polls here
+                # for now we put all incoming into the file
                 output_file(sink_name, data)
         elif sink_type == "odoo":
             for index, sink_name in enumerate(sinks["odoo"]["name"]):
@@ -153,166 +317,61 @@ def push_to_sinks(conf, data):
                 }
                 odoo["user_id"] = get_odoo_user_id(odoo)
 
-                if data["event_type"].startswith("volume"):
-                    if LOG.isEnabledFor(logging.DEBUG):
-                        LOG.debug(
-                            "%s", pformat(odoo_get(odoo, "sale.order", mode="fields"))
-                        )
-                        LOG.debug(
-                            "%s",
-                            pformat(odoo_get(odoo, "sale.order.line", mode="fields")),
-                        )
+                if data.get("event_type"):
+                    LOG.debug("### Event %s", data["event_type"])
 
-                    # traits = data['traits']
-                    # traits_dict = {}
-                    # for trait in traits:
-                    #     traits_dict[trait[0]] = trait[2]
+                    if data["event_type"].startswith("volume"):
+                        odoo_handle_os_volumes(odoo, data)
+                    elif data["event_type"].startswith("image"):
+                        # image.send
+                        pass
+                    elif data["event_type"].startswith("scheduler"):
+                        # scheduler.select_destinations.start
+                        # scheduler.select_destinations.end
+                        pass
+                    elif data["event_type"].startswith("compute"):
+                        # compute.instance.update
+                        # compute.instance.create.start
+                        # compute.instance.create.end
+                        pass
+                    elif data["event_type"].startswith("port"):
+                        # port.create.start
+                        # port.create.end
+                        # port.update.start
+                        # port.update.end
+                        pass
 
-                    data_dict = message_to_dict(data)
+                else:
+                    LOG.debug("### Polling %s", data["name"])
+                    # polling in observed chronological order
+                    # image.serve
+                    # disk.ephemeral.size
+                    # network.incoming.bytes.delta
+                    # network.outgoing.bytes.delta
+                    # memory.swap.in
+                    # memory.usage
+                    # memory.swap.out
+                    # cpu
+                    # memory.resident
+                    # image.size
+                    # network.incoming.packets
+                    # network.outgoing.packets
+                    # disk.device.read.latency
+                    # network.incoming.bytes
+                    # volume.size
+                    # network.incoming.packets.drop
+                    # disk.device.capacity
+                    # disk.device.usage
+                    # network.outgoing.bytes
+                    # disk.device.read.requests
+                    # disk.device.write.bytes
+                    # disk.device.read.bytes
+                    # disk.device.allocation
+                    # network.incoming.packets.error
+                    # network.outgoing.packets.error
+                    # network.outgoing.packets.drop
+                    # disk.device.write.latency
+                    # disk.device.write.requests
+                    #
 
-                    # project_id = traits_dict['project_id']
-                    project_id = data_dict["traits"]["project_id"]
-                    filter_list = [
-                        [["client_order_ref", "=", project_id], ["state", "=", "sale"]]
-                    ]
-                    projection_dict = {
-                        "fields": [
-                            "id",
-                            "user_id",
-                            "type_name",
-                            "visible_project",
-                            "tag_ids",
-                            "state",
-                            "require_signature",
-                            "require_payment",
-                            "reference",
-                            "project_ids",
-                            "pricelist_id",
-                            "partner_id",
-                            "origin",
-                            "order_line",
-                            "name",
-                            "id",
-                            "display_name",
-                            "create_uid",
-                            "client_order_ref",
-                            "invoice_ids",
-                        ],
-                        "limit": 1,
-                    }
-
-                    [sale_orders] = odoo_get(
-                        odoo,
-                        "sale.order",
-                        mode="records",
-                        filter_list=filter_list,
-                        projection_dict=projection_dict,
-                    )
-                    if not sale_orders:
-                        line_dict = {
-                            "partner_id": 75,
-                            "client_order_ref": project_id,
-                            "require_payment": False,
-                            "require_signature": False,
-                            "tag_ids": ["cloud", project_id],
-                        }
-
-                        sale_order_id = odoo_create(odoo, "sale.order", [line_dict])
-
-                        end_date = datetime.now()
-                        time_calc = calculate_cloud_time(
-                            data_dict["traits"]["created_at"], end_date
-                        )
-                        value_list = [str(data_dict["traits"]["size"])]
-
-                        info_dict = {
-                            "uuid": data_dict["traits"]["resource_id"],
-                            "name": data_dict["traits"]["display_name"],
-                            "values": value_list,
-                            "start": data_dict["traits"]["created_at"],
-                            "end": end_date,
-                        }
-                        display_name = get_name_from_info(info_dict)
-
-                        line_dict = {
-                            "product_id": 36,
-                            "display_name": display_name,
-                            "product_uom_qty": time_calc,
-                            "order_id": sale_order_id,
-                        }
-                        line_id = odoo_create(odoo, "sale.order.line", [line_dict])
-
-                    else:
-                        if LOG.isEnabledFor(logging.DEBUG):
-                            LOG.debug("%s", pformat(sale_orders))
-
-                        display_name = f"{data_dict['traits']['resource_id']} ({data_dict['traits']['size']}GB)"
-
-                        # line_ids = sale_orders['order_line']
-                        projection_dict = {
-                            "fields": [
-                                "id",
-                                #'product_id',
-                                #'display_name',
-                                #'product_uom_qty',
-                                #'order_id'
-                            ]
-                        }
-
-                        # line_records = odoo_get(odoo, 'sale.order.line',
-                        #                         mode='read',
-                        #                         filter_list=[line_ids],
-                        #                         # projection_dict=projection_dict
-                        #                         )
-
-                        line_record = odoo_get(
-                            odoo,
-                            "sale.order.line",
-                            mode="search_read",
-                            filter_list=[
-                                [
-                                    ["order_id", "=", sale_orders["id"]],
-                                    ["product_id", "=", 36],
-                                ]
-                            ],
-                            # projection_dict=projection_dict
-                        )
-                        if line_record:
-                            # todo update
-                            """
-                            we are reading the last state of the line and calculate the time
-                             between this line and the update message.
-                            """
-
-                            if LOG.isEnabledFor(logging.DEBUG):
-                                LOG.debug("%s", pformat(line_record))
-
-                            time_calc = calculate_cloud_time(line_record["name"])
-
-                            quantity = 3000
-                            odoo_update(
-                                odoo,
-                                "sale.order.line",
-                                line_record["id"],
-                                {"product_uom_qty": quantity},
-                            )
-                            pass
-                        else:
-                            """
-                            If there is no line already for the ressource, create it.
-                            """
-                            time_calc = calculate_cloud_time(
-                                data_dict["traits"]["created_at"]
-                            )
-
-                            line_dict = {
-                                "product_id": 36,
-                                "name": display_name,
-                                "product_uom_qty": time_calc,
-                                "order_id": sale_orders["id"],
-                            }
-                            line_id = odoo_create(odoo, "sale.order.line", [line_dict])
-                            LOG.debug("%s", line_id)
-
-    # LOG.debug('%s', conf)
     pass
