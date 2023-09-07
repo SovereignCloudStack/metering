@@ -9,6 +9,9 @@ from metersink.output_odoo import (
     get_odoo_user_id,
     odoo_create,
     odoo_update,
+    show_sales_order_fields,
+    get_sales_orders,
+    odoo_get_customer_from_project
 )
 from metersink.output_textfile import output_file
 
@@ -291,6 +294,129 @@ def odoo_handle_os_volumes(odoo, data):
             LOG.debug("%s", line_id)
 
 
+def odoo_handle_os_instances(odoo, data_dict):
+    #LOG.debug("instance data: %s", pformat(data))
+    # data_dict = message_to_dict(data)
+    LOG.debug("instance data: %s", pformat(data_dict))
+    project_id = data_dict["traits"]["project_id"]
+
+    # get info from odoo
+
+    [customer] = odoo_get_customer_from_project(odoo, project_id)
+    print(pformat(customer))
+    print(customer["sale_order_ids"])
+
+    # get sales_order from customer and tag
+    # if it does not exist ... create sales_order for customer and tag
+    show_sales_order_fields(odoo)
+    sales_orders = odoo_get(odoo,
+                            "sale.order",
+                            mode="read",
+                            filter_list=[customer["sale_order_ids"]],
+                            projection_dict={
+                            }
+                            )
+
+    if sales_orders:
+        print(pformat(sales_orders))
+        for sale_order in sales_orders:
+            print(sale_order["category_ids"])
+
+    if LOG.isEnabledFor(logging.DEBUG):
+        show_sales_order_fields(odoo)
+
+
+    # create
+    if data_dict.get('event_type') == "compute.instance.create.end":
+        LOG.debug("creating instance data: %s", data_dict)
+    # update
+    # delete
+    pass
+
+
+def setup_odoo_object(url, odoo_settings, settings_position):
+    odoo = {
+        "url": url,
+        "db": odoo_settings["odoo_db"][settings_position],
+        "user_name": odoo_settings["odoo_user_name"][settings_position],
+        "password": odoo_settings["odoo_api_key"][settings_position],
+        }
+    odoo["user_id"] = get_odoo_user_id(odoo)
+    return odoo
+
+
+def odoo_handle(odoo_sinks, conf, data):
+    for index, sink_name in enumerate(odoo_sinks["name"]):
+        odoo_version = get_odoo_version(sink_name)
+        if not odoo_version:
+            raise Exception("The odoo endpoint could not be found.")
+        LOG.debug("Odoo version is %s", odoo_version)
+        odoo_conf = get_config_section(conf, section="odoo")
+
+        odoo = setup_odoo_object(sink_name, odoo_conf, index)
+
+        data = message_to_dict(data)
+
+        if data.get("event_type"):
+            LOG.debug("### Event %s", data["event_type"])
+
+            if data["event_type"].startswith("volume"):
+                odoo_handle_os_volumes(odoo, data)
+
+            elif data["event_type"].startswith("image"):
+                # image.send
+                pass
+            elif data["event_type"].startswith("scheduler"):
+                # scheduler.select_destinations.start
+                # scheduler.select_destinations.end
+                pass
+            elif data["event_type"].startswith("compute"):
+                # compute.instance.update
+                # compute.instance.create.start
+                # compute.instance.create.end
+                odoo_handle_os_instances(odoo, data)
+
+            elif data["event_type"].startswith("port"):
+                # port.create.start
+                # port.create.end
+                # port.update.start
+                # port.update.end
+                pass
+
+        else:
+            LOG.debug("### Polling %s", data["name"])
+            # polling in observed chronological order
+            # image.serve
+            # disk.ephemeral.size
+            # network.incoming.bytes.delta
+            # network.outgoing.bytes.delta
+            # memory.swap.in
+            # memory.usage
+            # memory.swap.out
+            # cpu
+            # memory.resident
+            # image.size
+            # network.incoming.packets
+            # network.outgoing.packets
+            # disk.device.read.latency
+            # network.incoming.bytes
+            # volume.size
+            # network.incoming.packets.drop
+            # disk.device.capacity
+            # disk.device.usage
+            # network.outgoing.bytes
+            # disk.device.read.requests
+            # disk.device.write.bytes
+            # disk.device.read.bytes
+            # disk.device.allocation
+            # network.incoming.packets.error
+            # network.outgoing.packets.error
+            # network.outgoing.packets.drop
+            # disk.device.write.latency
+            # disk.device.write.requests
+            #
+
+
 def push_to_sinks(conf, data):
     # LOG.debug('%s', conf)
     sinks = get_sinks(conf)
@@ -302,76 +428,4 @@ def push_to_sinks(conf, data):
                 # for now we put all incoming into the file
                 output_file(sink_name, data)
         elif sink_type == "odoo":
-            for index, sink_name in enumerate(sinks["odoo"]["name"]):
-                odoo_version = get_odoo_version(sink_name)
-                if not odoo_version:
-                    raise Exception("The odoo endpoint could not be found.")
-                LOG.debug("Odoo version is %s", odoo_version)
-                odoo_conf = get_config_section(conf, section="odoo")
-
-                odoo = {
-                    "url": sink_name,
-                    "db": odoo_conf["odoo_db"][index],
-                    "user_name": odoo_conf["odoo_user_name"][index],
-                    "password": odoo_conf["odoo_api_key"][index],
-                }
-                odoo["user_id"] = get_odoo_user_id(odoo)
-
-                if data.get("event_type"):
-                    LOG.debug("### Event %s", data["event_type"])
-
-                    if data["event_type"].startswith("volume"):
-                        odoo_handle_os_volumes(odoo, data)
-                    elif data["event_type"].startswith("image"):
-                        # image.send
-                        pass
-                    elif data["event_type"].startswith("scheduler"):
-                        # scheduler.select_destinations.start
-                        # scheduler.select_destinations.end
-                        pass
-                    elif data["event_type"].startswith("compute"):
-                        # compute.instance.update
-                        # compute.instance.create.start
-                        # compute.instance.create.end
-                        pass
-                    elif data["event_type"].startswith("port"):
-                        # port.create.start
-                        # port.create.end
-                        # port.update.start
-                        # port.update.end
-                        pass
-
-                else:
-                    LOG.debug("### Polling %s", data["name"])
-                    # polling in observed chronological order
-                    # image.serve
-                    # disk.ephemeral.size
-                    # network.incoming.bytes.delta
-                    # network.outgoing.bytes.delta
-                    # memory.swap.in
-                    # memory.usage
-                    # memory.swap.out
-                    # cpu
-                    # memory.resident
-                    # image.size
-                    # network.incoming.packets
-                    # network.outgoing.packets
-                    # disk.device.read.latency
-                    # network.incoming.bytes
-                    # volume.size
-                    # network.incoming.packets.drop
-                    # disk.device.capacity
-                    # disk.device.usage
-                    # network.outgoing.bytes
-                    # disk.device.read.requests
-                    # disk.device.write.bytes
-                    # disk.device.read.bytes
-                    # disk.device.allocation
-                    # network.incoming.packets.error
-                    # network.outgoing.packets.error
-                    # network.outgoing.packets.drop
-                    # disk.device.write.latency
-                    # disk.device.write.requests
-                    #
-
-    pass
+            odoo_handle(sinks['odoo'], conf, data)

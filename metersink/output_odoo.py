@@ -4,6 +4,7 @@ Library to find odoo related functions
 import logging
 import xmlrpc.client
 from datetime import datetime
+from pprint import pformat
 
 LOG = logging.getLogger(__name__)
 
@@ -48,6 +49,8 @@ def odoo_get(odoo, model, mode="ids", filter_list=None, projection_dict=None):
         mode = "search"
     elif mode == "rights":
         mode = "check_access_rights"
+    elif mode == "read":
+        pass
 
     models = get_client(odoo, client="models")
 
@@ -69,16 +72,72 @@ def odoo_get(odoo, model, mode="ids", filter_list=None, projection_dict=None):
         )
     return records
 
+def odoo_get_contact_from_tag(odoo, tag):
+    filter_list = [
+        [
+            ["category_id", "=", tag],
+        ]
+    ]
 
-def get_sales_orders(odoo, filter_list=None, projection_dict=None):
+    projection_dict = {
+        "fields": [
+            "active",
+            "category_id",
+            "id",
+            "comment",
+            "company_name",
+            "currency_id",
+            "customer_rank",
+            "employee",
+            "invoice_ids",
+            "is_company",
+            "name",
+            "parent_id",
+            "phone",
+            "sale_order_ids",
+            "sla_ids"
+        ],
+        "limit": 1,
+    }
+    contact = get_odoo_partner(odoo, filter_list=filter_list, projection_dict=projection_dict)
+    if not contact:
+        LOG.info("No contact found for tag: %s", tag)
+    else:
+        LOG.debug("found contact: %s", pformat(contact))
+    return contact
+
+
+def odoo_get_customer_from_project(odoo, project_id):
+    tag = f"project={project_id}"
+    customer = odoo_get_contact_from_tag(odoo, tag)
+    if not customer:
+        LOG.info("No customer found for project: %s", project_id)
+    else:
+        LOG.debug("found customer: %s", pformat(customer))
+    return customer
+
+
+def get_sales_orders(odoo, mode="ids", filter_list=None, projection_dict=None):
     sale_orders = odoo_get(
         odoo,
         "sale.order",
-        mode="records",
+        mode=mode,
         filter_list=filter_list,
         projection_dict=projection_dict,
     )
     return sale_orders
+
+def odoo_get_sales_order(odoo, filter):
+    pass
+
+def show_sales_order_fields(odoo):
+    LOG.debug(
+        "%s", pformat(odoo_get(odoo, "sale.order", mode="fields"))
+    )
+    LOG.debug(
+        "%s",
+        pformat(odoo_get(odoo, "sale.order.line", mode="fields")),
+    )
 
 
 def odoo_create(odoo, model, record_list):
@@ -129,161 +188,14 @@ def get_odoo_user_id(odoo):
 
 
 def get_odoo_partner(odoo, filter_list=None, projection_dict=None):
+
+    LOG.debug(
+        "partner %s",
+        pformat(odoo_get(odoo, "res.partner", mode="fields")),
+    )
+    if not filter_list:
+        filter_list = []
     partner = odoo_get(
-        odoo, "res.partner", filter_list=filter_list, projection_dict=projection_dict
+        odoo, "res.partner", mode="records", filter_list=filter_list, projection_dict=projection_dict
     )
     return partner
-
-
-# def get_account_id(odoo, tw_tag_list):
-#     """
-#     not used
-#     """
-#     print('get_account_id')
-#     print(tw_tag_list)
-#     account_id = None
-#     models = get_client(odoo, client='models')
-#
-#     ids = models.execute_kw(odoo['db'], odoo['user_id'], odoo['password'],
-#                             'account.analytic.line', 'search_read',
-#                             [[['account_id.name', '=', 'odoo']]]
-#                             # [[]]
-#                             )
-#     pprint(ids)
-#     if ids:
-#         account_id = ids[0]['account_id']
-#         print('matched projects', ids)
-#     return account_id
-
-
-# def get_project_id(odoo, tw_tag_list):
-#     """
-#     returns the project_id for a tag list
-#     """
-#     # print('get_project_id')
-#     project_id = None
-#     for tag in tw_tag_list:
-#         line = odoo_get(odoo, 'account.analytic.line',
-#                         mode='records',
-#                         filter_list=[[['project_id.name', '=', tag]]],
-#                         projection_dict={'limit': 1})
-#         if line:
-#             print(line)
-#             project_id = line[0]['project_id'][0]
-#             break
-#     # print(project_id)
-#     return project_id
-
-
-def get_project(odoo, resource_object):
-    project = None
-    return project
-
-# def create_line_in_odoo_from_time_tracking_data(odoo, line):
-#     """
-#     takes the odo config and a dict and returns the line_id created by odoo on inserting the line
-#     """
-#
-#     print(line)
-#     # account_id = get_account_id(odoo, odoo_password, tw_line['tags'])
-#     # print('account_is: ', account_id)
-#     # company_id = get_company_id(odoo, odoo_password)
-#
-#     project_id = get_project_id(odoo, line['tags'])
-#     if project_id:
-#         name = 'TimeWarrior import ' + get_hash(line['start'])
-#         date = str(datetime.date(line['start']))[:10]
-#         amount = line['amount']
-#         line_dict = {
-#             'date': date,
-#             'unit_amount': amount,
-#             'name': name,
-#             'project_id': project_id,
-#         }
-#         print('###############################################')
-#         print(line_dict)
-#
-#         line_id = odoo_create(odoo, 'account.analytic.line', [line_dict])
-#
-#         print(line_id)
-#         # new_id = get_analytic_line(odoo, [['id', '=', line_id]])
-#         record = odoo_get(odoo, 'account.analytic.line',
-#                           mode="record",
-#                           filter_list=[[['id', '=', line_id]]],
-#                           projection_dict={})
-#         print('###############################################')
-#         print('created line')
-#         pprint(record)
-#         return line_id
-#     return None
-
-
-# def get_employee_id(odoo, user_id=None):
-#     """
-#     returns the employee_id of a user
-#     """
-#     if not user_id:
-#         user_id = odoo['user_id']
-#     users = odoo_get(odoo, 'res.users',
-#                      mode="records",
-#                      filter_list=[[['id', '=', user_id]]],
-#                      projection_dict={'fields': ['name', 'employee_id']}
-#                      )
-#     employee_id = users[0]['employee_id'][0]
-#     # print(employee_id)
-#     return employee_id
-
-
-def create_invoice(data):
-    pass
-
-
-def get_invoice_line(data):
-    pass
-
-
-def open_invoice_line(data):
-    pass
-
-
-def close_invoice_line(data):
-    pass
-
-
-def create_flavor_produkt(data):
-    pass
-
-
-def is_in_odoo(odoo, model=None, line=None, filter_dict=None):
-    """
-    looks for already existing entries.
-    """
-    # print(line)
-    if not filter_dict:
-        filter_dict = {}
-
-    filter_dict["date"] = str(datetime.date(line["start"]))[:10]
-    # filter_dict["name"] = "TimeWarrior import " + get_hash(line["start"])
-    # filter_dict["employee_id"] = get_employee_id(odoo)
-
-    filter_list = []
-    for key, value in filter_dict.items():
-        filter_list.append([key, "=", value])
-
-    project_id = get_project(odoo, line["tags"])
-
-    if not project_id:
-        return False
-    project = ["project_id.id", "=", project_id]
-    filter_list.append(project)
-
-    records = odoo_get(
-        odoo,
-        model=model,
-        mode="records",
-        filter_list=[filter_list],
-        projection_dict={"limit": 1},
-    )
-    if records:
-        return True
-    return False
