@@ -4,6 +4,7 @@ from pprint import pformat
 from flask import Flask, request, json
 
 from metersink.lib import *
+from metersink.output_odoo import odoo_handle
 
 app = Flask(__name__)
 
@@ -20,6 +21,19 @@ _init_logger()
 LOG = logging.getLogger(NAME)
 
 CONFIG = None
+
+def push_to_sinks(conf, data):
+    # LOG.debug('%s', conf)
+    sinks = get_sinks(conf)
+    LOG.debug("pushing to sinks: %s", sinks)
+    for sink_type, sink_values in sinks.items():
+        if sink_type == "file":
+            for index, sink_name in enumerate(sinks["file"]["name"]):
+                # ToDo maybe we want to differ between events and polls here
+                # for now we put all incoming into the file
+                output_file(sink_name, data)
+        elif sink_type == "odoo":
+            odoo_handle(sinks['odoo'], conf, data)
 
 
 @app.route("/post_json", methods=["POST"])
