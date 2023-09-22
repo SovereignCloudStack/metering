@@ -135,29 +135,29 @@ def odoo_get(odoo, model, mode="ids", filter_list=None, projection_dict=None):
         )
     return records
 
-def odoo_get_contact_from_tag(odoo, tag, limit=None):
-    """is looking for a res partner, that has a special tag"""
+def odoo_get_contact_from_tag(odoo, tag_list, limit=None):
+    """is looking for a res partner, that has special tags"""
     filter_list = [
         [
-            ["category_id", "=", tag],
+            ["category_id", "in", tag_list],
         ]
     ]
 
     projection_dict = get_projection_dict(model="res.partner", limit=limit)
     contact_list = get_odoo_partner(odoo, filter_list=filter_list, projection_dict=projection_dict)
     if not contact_list:
-        LOG.info("No contact found for tag: %s", tag)
+        LOG.info("No contact found for tags: %s", tag_list)
     else:
         LOG.debug("found contact: %s", pformat(contact_list))
     return contact_list
 
 
-def odoo_get_customer_from_project(odoo, project_id):
-    """Is looking for a customer with given project id"""
-    tag = f"project={project_id}"
-    customer_list = odoo_get_contact_from_tag(odoo, tag, limit=1)
+def odoo_get_customer_from_project(odoo, tag_list):
+    """Is looking for a customer with given tag"""
+    #tag = f"project={project_id}"
+    customer_list = odoo_get_contact_from_tag(odoo, tag_list, limit=1)
     if not customer_list:
-        LOG.info("No customer found for project: %s", project_id)
+        LOG.info("No customer found for tags: %s", tag_list)
     else:
         LOG.debug("found customer: %s", pformat(customer_list))
     return customer_list
@@ -383,14 +383,40 @@ def odoo_handle_os_volumes(odoo, data_dict):
             LOG.debug("%s", line_id)
 
 
-def get_sale_order_id(odoo, project_id):
+def create_sale_order(odoo, customer, tag_list):
+    """creates a new SO for customer with tags"""
+    record_list = [
+                {
+                    "partner_id": customer['id'],
+                    "category_ids": tag_list
+                }
+            ]
+    new_id = odoo_create(odoo, "sale.order", record_list)
+    return new_id
+
+
+def create_sale_order_line(odoo, order_id, product_id, display_name, product_uom_qty):
+    """creates a new so line and returns its id"""
+    record_list = [
+        {
+            "order_id": order_id,
+            "product_id": product_id,
+            "display_name": display_name,
+            "product_uom_qty": product_uom_qty,
+        }
+    ]
+    new_id = odoo_create(odoo, "Sale.order.line", record_list)
+    return new_id
+
+
+def get_sale_order_id(odoo, tag_list):
     """
     Returns the id of a Sale_order to further work on if the Customer is known.
     Else it gives nothing back.
     """
-    project_tag = f"project={project_id}"
+    # project_tag = f"project={project_id}"
 
-    [customer] = odoo_get_customer_from_project(odoo, project_id)
+    [customer] = odoo_get_customer_from_project(odoo, tag_list)
     if customer:
         print(pformat(customer))
         print(customer["sale_order_ids"])
@@ -398,9 +424,9 @@ def get_sale_order_id(odoo, project_id):
         if LOG.isEnabledFor(logging.DEBUG):
             show_sale_order_fields(odoo)
         filter_list = [
-            "|",
+            #"|",
             ["customer_id" , "=", customer["id"]],
-            ["category_ids", "=", project_tag]
+            #["category_ids", "=", project_tag]
         ]
         projection_dict = get_projection_dict()
         [sale_order_id] = odoo_get(
@@ -413,17 +439,7 @@ def get_sale_order_id(odoo, project_id):
 
         if not sale_order_id:
             # create new sale order
-            new_sale_orders = [
-                {
-                    "partner_id": customer['id'],
-                    "category_ids": project_tag
-                }
-            ]
-            sale_order_id = odoo_create(
-                odoo,
-                "sale.order",
-                record_list=new_sale_orders
-            )
+            sale_order_id = create_sale_order(odoo, customer, tag_list)
         return sale_order_id
     return None
 
@@ -453,8 +469,9 @@ def odoo_handle_os_instances(odoo, data_dict):
     # data_dict = message_to_dict(data)
     LOG.debug("instance data: %s", pformat(data_dict))
     project_id = data_dict["traits"]["project_id"]
+    tag_list = [f"project={project_id}"]
 
-    sale_order_id = get_sale_order_id(odoo, project_id)
+    sale_order_id = get_sale_order_id(odoo, [tag_list])
 
 
     if sale_order_id:

@@ -1,16 +1,14 @@
+"""describes the api endpoint of the metering tool"""
 import argparse
 import logging
 from pprint import pformat
 from flask import Flask, request, json
 
-from metersink.lib import *
+from metersink.lib import get_config, get_sinks, output_file
 from metersink.output_odoo import odoo_handle
 
 app = Flask(__name__)
-
-
 NAME = "billing_api"
-
 
 def _init_logger():
     logger = logging.getLogger(NAME)
@@ -23,13 +21,14 @@ LOG = logging.getLogger(NAME)
 CONFIG = None
 
 def push_to_sinks(conf, data):
+    """puts received metering data to the configured billing sinks"""
     # LOG.debug('%s', conf)
     sinks = get_sinks(conf)
     LOG.debug("pushing to sinks: %s", sinks)
     for sink_type, sink_values in sinks.items():
         if sink_type == "file":
             for index, sink_name in enumerate(sinks["file"]["name"]):
-                # ToDo maybe we want to differ between events and polls here
+                # maybe we want to differ between events and polls here
                 # for now we put all incoming into the file
                 output_file(sink_name, data)
         elif sink_type == "odoo":
@@ -38,6 +37,7 @@ def push_to_sinks(conf, data):
 
 @app.route("/post_json", methods=["POST"])
 def process_json():
+    """Endpoint for json requests"""
     content_type = request.headers.get("Content-Type")
     if content_type == "application/json":
         json_data = request.json
@@ -47,11 +47,11 @@ def process_json():
         for message in data:
             push_to_sinks(CONFIG, message)
         return json_data, 202
-    else:
-        return "Content-Type not supported!", 204
+    return "Content-Type not supported!", 204
 
 
 def main():
+    """the main function"""
     global CONFIG
     parser = argparse.ArgumentParser()
     parser.add_argument(
