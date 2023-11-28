@@ -5,11 +5,6 @@ import logging
 import re
 from datetime import datetime, timedelta
 
-from metersink.output_textfile import output_file
-
-from pprint import pformat
-
-
 LOG = logging.getLogger(__name__)
 
 def dump_config(cfg):
@@ -22,7 +17,6 @@ def dump_config(cfg):
         for option in cfg[section]:
             LOG.debug("[%s]  %s = %s", section, option, cfg.get(section, option))
 
-
 def get_config(path):
     """
     retrieves the config from the config file
@@ -32,7 +26,6 @@ def get_config(path):
     cfg.read_file(open(path))
     dump_config(cfg)
     return cfg
-
 
 def get_config_section(_config, section=None):
     """returns the config in a special section as dict"""
@@ -49,10 +42,10 @@ def get_config_section(_config, section=None):
                 if len(values):
                     section_dict[option] = values
         return section_dict
-
+    return _config
 
 def get_sinks(conf):
-    """returns the configurated sinks from the settings"""
+    """returns the configured sinks from the settings"""
     section = "output"
     section_dict = get_config_section(conf, section=section)
     output_dict = {}
@@ -68,7 +61,6 @@ def get_sinks(conf):
 
     return output_dict
 
-
 def get_time(param):
     """returns a timestamp now, start or end of the current month"""
     if param == "month_start":
@@ -80,7 +72,6 @@ def get_time(param):
         _time = datetime.now()
     return _time
 
-
 def calculate_cloud_time(value1, value2=None):
     """returns the time between value1 and now or value2 in minutes"""
     if not value2:
@@ -88,9 +79,7 @@ def calculate_cloud_time(value1, value2=None):
 
     delta = value2 - datetime.strptime(value1, "%Y-%m-%dT%H:%M:%S")
     value = int(round(delta.total_seconds() / 60))
-
     return value
-
 
 def parse_so_line_name(text):
     """
@@ -102,23 +91,24 @@ def parse_so_line_name(text):
     data_dict = re.search(pattern, text)
     return data_dict
 
-
-def get_info_from_message(message):
-    info = message
-    return info
-
-
 def get_info_from_name(display_name):
+    """
+    returns some dict like object, created from the so display_name
+    """
     data_dict = parse_so_line_name(display_name)
     return data_dict
 
-
-def get_name_from_info(info):
-    display_name = f"{info['uuid']}\n{info['name']}\n({info['values']})\n{info['start']} - {info['end']}"
+def get_name_from_info(info) -> str:
+    """
+    returns the so line display_name
+    """
+    display_name = (f"{info['uuid']}\n"
+                    f"{info['name']}\n"
+                    f"({info['values']})\n"
+                    f"{info['start']} - {info['end']}")
     return display_name
 
-
-def message_to_dict(message):
+def message_to_dict(message) -> dict:
     """turns the ceilometer message into a python dict"""
     traits = message["traits"]
     traits_dict = {}
