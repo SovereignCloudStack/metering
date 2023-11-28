@@ -6,10 +6,14 @@ import xmlrpc.client
 from datetime import datetime
 from pprint import pformat
 
-from metersink.lib import *
+from metersink.lib import (
+    calculate_cloud_time,
+    get_name_from_info,
+    message_to_dict,
+    get_config_section,
+)
 
 LOG = logging.getLogger(__name__)
-
 
 def get_client(odoo, client="common"):
     """returns the client"""
@@ -22,7 +26,6 @@ def get_client(odoo, client="common"):
     client = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/{client}")
     return client
 
-
 def get_odoo_version(url):
     """gets the odoo version"""
     try:
@@ -33,8 +36,7 @@ def get_odoo_version(url):
         LOG.exception("failed to obtain odoo version")
     return None
 
-
-def get_projection_dict(model=None, limit=None):
+def get_projection_dict(model=None, limit=None) -> dict:
     """Provides mapping for viewable fields based on their model."""
     projection_dict = {}
     if limit:
@@ -135,7 +137,7 @@ def odoo_get(odoo, model, mode="ids", filter_list=None, projection_dict=None):
         )
     return records
 
-def odoo_get_contact_from_tag(odoo, tag_list, limit=None):
+def odoo_get_contact_from_tag(odoo, tag_list, limit=None) -> list:
     """is looking for a res partner, that has special tags"""
     filter_list = [
         [
@@ -151,19 +153,10 @@ def odoo_get_contact_from_tag(odoo, tag_list, limit=None):
         LOG.debug("found contact: %s", pformat(contact_list))
     return contact_list
 
-
-def odoo_get_customer_from_project(odoo, tag_list):
-    """Is looking for a customer with given tag"""
-    #tag = f"project={project_id}"
-    customer_list = odoo_get_contact_from_tag(odoo, tag_list, limit=1)
-    if not customer_list:
-        LOG.info("No customer found for tags: %s", tag_list)
-    else:
-        LOG.debug("found customer: %s", pformat(customer_list))
-    return customer_list
-
-
 def get_sale_orders(odoo, mode="ids", filter_list=None, projection_dict=None):
+    """
+    returns SOs by filter
+    """
     sale_orders = odoo_get(
         odoo,
         "sale.order",
@@ -172,21 +165,6 @@ def get_sale_orders(odoo, mode="ids", filter_list=None, projection_dict=None):
         projection_dict=projection_dict,
     )
     return sale_orders
-
-
-def show_sale_order_fields(odoo):
-    """
-    This is for debugging or getting information about special models in odoo
-    The Sale-Order and Sale-Order Line Model
-    """
-    LOG.debug(
-        "%s", pformat(odoo_get(odoo, "sale.order", mode="fields"))
-    )
-    LOG.debug(
-        "%s",
-        pformat(odoo_get(odoo, "sale.order.line", mode="fields")),
-    )
-
 
 def odoo_create(odoo, model, record_list):
     """
@@ -197,7 +175,6 @@ def odoo_create(odoo, model, record_list):
         odoo["db"], odoo["user_id"], odoo["password"], model, "create", record_list
     )
     return record_id
-
 
 def odoo_update(odoo, model, record_id, data_dict):
     """
@@ -219,7 +196,6 @@ def odoo_update(odoo, model, record_id, data_dict):
     )
     return record_id
 
-
 def get_odoo_user_id(odoo):
     """
     Takes the odoo config and tries to claim the user_id from the odoo user
@@ -234,13 +210,12 @@ def get_odoo_user_id(odoo):
         LOG.exception("failed to get user ID from odoo")
     return None
 
-
 def get_odoo_partner(odoo, filter_list=None, projection_dict=None):
+    """
+    returns a res.partner record
+    """
+    show_fields(odoo, "res.partner")
 
-    LOG.debug(
-        "partner %s",
-        pformat(odoo_get(odoo, "res.partner", mode="fields")),
-    )
     if not filter_list:
         filter_list = []
     partner = odoo_get(
@@ -250,7 +225,6 @@ def get_odoo_partner(odoo, filter_list=None, projection_dict=None):
         projection_dict=projection_dict
     )
     return partner
-
 
 def setup_odoo_object(url, odoo_settings, settings_position):
     """returns odoo client information"""
@@ -263,126 +237,6 @@ def setup_odoo_object(url, odoo_settings, settings_position):
     odoo["user_id"] = get_odoo_user_id(odoo)
     return odoo
 
-
-def odoo_handle_os_volumes(odoo, data_dict):
-    if LOG.isEnabledFor(logging.DEBUG):
-        LOG.debug(
-            "%s", pformat(odoo_get(odoo, "sale.order", mode="fields"))
-        )
-        LOG.debug(
-            "%s",
-            pformat(odoo_get(odoo, "sale.order.line", mode="fields")),
-        )
-
-    project_id = data_dict["traits"]["project_id"]
-
-    # todo do we need this state and ref?
-    filter_list = [
-        [["client_order_ref", "=", project_id], ["state", "=", "sale"]]
-    ]
-
-    projection_dict = get_projection_dict(model="sale.order", limit=1)
-    [sale_orders] = odoo_get(
-        odoo,
-        "sale.order",
-        mode="records",
-        filter_list=filter_list,
-        projection_dict=projection_dict,
-    )
-    if not sale_orders:
-        line_dict = {
-            "partner_id": 75,
-            "client_order_ref": project_id,
-            "require_payment": False,
-            "require_signature": False,
-            "tag_ids": ["cloud", project_id],
-        }
-
-        sale_order_id = odoo_create(odoo, "sale.order", [line_dict])
-
-        end_date = datetime.now()
-        time_calc = calculate_cloud_time(
-            data_dict["traits"]["created_at"], end_date
-        )
-        value_list = [str(data_dict["traits"]["size"])]
-
-        info_dict = {
-            "uuid": data_dict["traits"]["resource_id"],
-            "name": data_dict["traits"]["display_name"],
-            "values": value_list,
-            "start": data_dict["traits"]["created_at"],
-            "end": end_date,
-        }
-        display_name = get_name_from_info(info_dict)
-
-        line_dict = {
-            "product_id": 36,
-            "display_name": display_name,
-            "product_uom_qty": time_calc,
-            "order_id": sale_order_id,
-        }
-        line_id = odoo_create(odoo, "sale.order.line", [line_dict])
-
-    else:
-        if LOG.isEnabledFor(logging.DEBUG):
-            LOG.debug("%s", pformat(sale_orders))
-
-        display_name = f"{data_dict['traits']['resource_id']} ({data_dict['traits']['size']}GB)"
-
-        # line_ids = sale_orders['order_line']
-        # projection_dict = get_projection_dict(model="sale.order.line")
-
-        # line_records = odoo_get(odoo, 'sale.order.line',
-        #                         mode='read',
-        #                         filter_list=[line_ids],
-        #                         # projection_dict=projection_dict
-        #                         )
-
-        line_record = odoo_get(
-            odoo,
-            "sale.order.line",
-            mode="search_read",
-            filter_list=[
-                [
-                    ["order_id", "=", sale_orders["id"]],
-                    ["product_id", "=", 36],
-                ]
-            ],
-            # projection_dict=projection_dict
-        )
-        if line_record:
-            # todo update
-            # we are reading the last state of the line and calculate the time between this line and the update message.
-
-            if LOG.isEnabledFor(logging.DEBUG):
-                LOG.debug("%s", pformat(line_record))
-
-            time_calc = calculate_cloud_time(line_record["name"])
-
-            quantity = 3000
-            odoo_update(
-                odoo,
-                "sale.order.line",
-                line_record["id"],
-                {"product_uom_qty": quantity},
-            )
-        else:
-            # If there is no line already for the ressource, create it.
-
-            time_calc = calculate_cloud_time(
-                data_dict["traits"]["created_at"]
-            )
-
-            line_dict = {
-                "product_id": 36,
-                "name": display_name,
-                "product_uom_qty": time_calc,
-                "order_id": sale_orders["id"],
-            }
-            line_id = odoo_create(odoo, "sale.order.line", [line_dict])
-            LOG.debug("%s", line_id)
-
-
 def create_sale_order(odoo, customer, tag_list):
     """creates a new SO for customer with tags"""
     record_list = [
@@ -393,7 +247,6 @@ def create_sale_order(odoo, customer, tag_list):
             ]
     new_id = odoo_create(odoo, "sale.order", record_list)
     return new_id
-
 
 def create_sale_order_line(odoo, order_id, product_id, display_name, product_uom_qty):
     """creates a new so line and returns its id"""
@@ -408,7 +261,6 @@ def create_sale_order_line(odoo, order_id, product_id, display_name, product_uom
     new_id = odoo_create(odoo, "Sale.order.line", record_list)
     return new_id
 
-
 def get_sale_order_id(odoo, tag_list):
     """
     Returns the id of a Sale_order to further work on if the Customer is known.
@@ -416,10 +268,10 @@ def get_sale_order_id(odoo, tag_list):
     """
     # project_tag = f"project={project_id}"
 
-    [customer] = odoo_get_customer_from_project(odoo, tag_list)
+    [customer] = odoo_get_contact_from_tag(odoo,tag_list, limit=1)
     if customer:
-        print(pformat(customer))
-        print(customer["sale_order_ids"])
+        LOG.debug("%s",pformat(customer))
+        LOG.debug("%s",customer["sale_order_ids"])
 
         if LOG.isEnabledFor(logging.DEBUG):
             show_sale_order_fields(odoo)
@@ -443,50 +295,139 @@ def get_sale_order_id(odoo, tag_list):
         return sale_order_id
     return None
 
+def get_sale_order_line(odoo, filter_list, create=True):
+    """returns a so line"""
+    line_record = odoo_get(
+            odoo,
+            "sale.order.line",
+            mode="search_read",
+            filter_list=filter_list,
+        )
+    if not line_record and create:
+        line_record = odoo_create(odoo, "sale.order.line", [
+            {}
+        ])
+    return line_record
 
-def get_sale_order_line():
-    """to be implemented"""
-    pass
-
-
-def get_product_id(odoo, product_name):
+def get_product_id(odoo, product_name, create=True):
     """this is looking for the corresponding product_id in odoo"""
-    # fixme
     product_id = odoo_get(odoo,
                           "res.product",
                           mode="ids",
                           filter_list=[["display_name", "=", product_name]],
                           projection_dict={"limit": 1},
                           )
+    if not product_id and create:
+        product_id = odoo_create(odoo, "res.product", [
+            {"display_name": product_name}
+        ])
+    else:
+        LOG.debug("There is no product %s",product_name)
     return product_id
 
+def is_supported() -> tuple:
+    """
+    this returns a tuple of supported resources
+    """
+    supported_resource_list = [
+        "volume",
+        # "image",
+        "compute",
+        # "scheduler",
+        # "port",
+    ]
+    supported_resources = tuple(supported_resource_list)
+    return supported_resources
 
-def odoo_handle_os_instances(odoo, data_dict):
+def odoo_handle_os_resource(odoo, data):
     """
-    handles instances
+    reads and writes into odoo sale-order
     """
-    #LOG.debug("instance data: %s", pformat(data))
-    # data_dict = message_to_dict(data)
-    LOG.debug("instance data: %s", pformat(data_dict))
-    project_id = data_dict["traits"]["project_id"]
+    if LOG.isEnabledFor(logging.DEBUG):
+        show_fields(odoo, "sale.order")
+        show_fields(odoo, "sale.order.line")
+
+    project_id = data["traits"]["project_id"]
     tag_list = [f"project={project_id}"]
+    sale_order_id = get_sale_order_id(odoo, tag_list)
+    LOG.debug("so id %s", sale_order_id)
 
-    sale_order_id = get_sale_order_id(odoo, [tag_list])
+    product_name = "noname"
+    value_list = []
 
+    if data["event_type"].startswith("volume"):
+        product_name = "volume"
+        value_list = [str(data["traits"]["size"])]
+    elif data["event_type"].startswith("compute"):
+        product_name = "compute"
+        value_list = [data["traits"]["flavor_name"]]
+    elif data["event_type"].startswith("image"):
+        # todo to be implemented
+        # image.send
+        pass
+    elif data["event_type"].startswith("scheduler"):
+        # todo to be implemented
+        # scheduler.select_destinations.start
+        # scheduler.select_destinations.end
+        pass
+    elif data["event_type"].startswith("port"):
+        # todo to be implemented
+        # port.create.start
+        # port.create.end
+        # port.update.start
+        # port.update.end
+        pass
 
-    if sale_order_id:
-        # if resource is already in a sale.order.line update it
-        # if no such line exists, create it.
+    product_id = get_product_id(odoo, product_name)
+    end_date = datetime.now()
+    time_calc = calculate_cloud_time(
+        data["traits"]["created_at"], end_date
+    )
 
+    info_dict = {
+            "uuid": data["traits"]["resource_id"],
+            "name": data["traits"]["display_name"],
+            "values": value_list,
+            "start": data["traits"]["created_at"],
+            "end": end_date,
+        }
+    display_name = get_name_from_info(info_dict)
 
-        # create
-        if data_dict.get('event_type') == "compute.instance.create.end":
-            LOG.debug("creating instance data: %s", data_dict)
-        # update
-        # delete
+    filter_list = [
+                [
+                    ["order_id", "=", sale_order_id],
+                    ["product_id", "=", product_id],
+                ]
+            ]
 
+    line_record = get_sale_order_line(odoo, filter_list, create=False)
+    if line_record:
+        # we are reading the last state of the line and
+        # calculate the time between this line and the update message.
+        LOG.debug("%s", pformat(line_record))
+        time_calc = calculate_cloud_time(line_record["name"])
+
+        odoo_update(
+            odoo,
+            "sale.order.line",
+            line_record["id"],
+            {"product_uom_qty": time_calc},
+        )
+
+    else:
+        # If there is no line already for the ressource, create it.
+        line_id = create_sale_order_line(odoo,
+                                         sale_order_id,
+                                         product_id,
+                                         display_name,
+                                         time_calc,
+                                         )
+        LOG.debug("%s", line_id)
 
 def odoo_handle(odoo_sinks, conf, data):
+    """
+    handle multiple odoo instances and pipeline events and polling
+    """
     for index, sink_name in enumerate(odoo_sinks["name"]):
         odoo_version = get_odoo_version(sink_name)
         if not odoo_version:
@@ -497,36 +438,19 @@ def odoo_handle(odoo_sinks, conf, data):
         odoo = setup_odoo_object(sink_name, odoo_conf, index)
 
         data = message_to_dict(data)
+        supported_resources = is_supported()
 
         if data.get("event_type"):
             LOG.debug("### Event %s", data["event_type"])
 
-            if data["event_type"].startswith("volume"):
-                # look for a sale_order to progress on
-                odoo_handle_os_volumes(odoo, data)
-
-            elif data["event_type"].startswith("image"):
-                # image.send
-                pass
-            elif data["event_type"].startswith("scheduler"):
-                # scheduler.select_destinations.start
-                # scheduler.select_destinations.end
-                pass
-            elif data["event_type"].startswith("compute"):
-                # compute.instance.update
-                # compute.instance.create.start
-                # compute.instance.create.end
-                odoo_handle_os_instances(odoo, data)
-
-            elif data["event_type"].startswith("port"):
-                # port.create.start
-                # port.create.end
-                # port.update.start
-                # port.update.end
-                pass
+            if data["event_type"].startswith(supported_resources):
+                odoo_handle_os_resource(odoo, data)
+            else:
+                LOG.info("### Event %s is not supported", data["event_type"])
 
         else:
             LOG.debug("### Polling %s", data["name"])
+            # todo to be implemented
             # polling in observed chronological order
             # image.serve
             # disk.ephemeral.size
@@ -556,3 +480,24 @@ def odoo_handle(odoo_sinks, conf, data):
             # network.outgoing.packets.drop
             # disk.device.write.latency
             # disk.device.write.requests
+
+### debug helper functions ####################################################
+def show_fields(odoo, model):
+    """
+    for debugging purpose
+    """
+    LOG.debug(
+        "%s %s", model ,pformat(
+            odoo_get(odoo, model, mode="fields")
+        )
+    )
+
+def show_sale_order_fields(odoo):
+    """
+    This is for debugging or getting information about special models in odoo
+    The Sale-Order and Sale-Order Line Model
+    """
+    show_fields(odoo, "sale.order")
+    show_fields(odoo, "sale.order.line")
+
+###############################################################################
