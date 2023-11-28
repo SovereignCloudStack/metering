@@ -4,8 +4,9 @@ import logging
 from pprint import pformat
 from flask import Flask, request, json
 
-from metersink.lib import get_config, get_sinks, output_file
+from metersink.lib import get_config, get_sinks
 from metersink.output_odoo import odoo_handle
+from metersink.output_textfile import output_file
 
 app = Flask(__name__)
 NAME = "billing_api"
@@ -13,7 +14,6 @@ NAME = "billing_api"
 def _init_logger():
     logger = logging.getLogger(NAME)
     logger.setLevel(logging.INFO)
-
 
 _init_logger()
 LOG = logging.getLogger(NAME)
