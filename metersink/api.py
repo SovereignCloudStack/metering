@@ -39,15 +39,17 @@ def push_to_sinks(conf, data):
 def process_json():
     """Endpoint for json requests"""
     content_type = request.headers.get("Content-Type")
-    if content_type == "application/json":
-        json_data = request.json
-        LOG.debug("### the request ###############################################################")
-        LOG.debug("json_body: %s", pformat(json_data))
-        data = json.loads(request.data)
-        for message in data:
-            push_to_sinks(CONFIG, message)
-        return json_data, 202
-    return "Content-Type not supported!", 204
+    if not content_type == "application/json":
+        err_msg = f"Content-Type {content_type} not supported!"
+        return err_msg, 204
+
+    json_data = request.json
+    LOG.debug("### the request ###############################################################")
+    LOG.debug("json_body: %s", pformat(json_data))
+    data = json.loads(request.data)
+    for message in data:
+        push_to_sinks(CONFIG, message)
+    return json_data, 202
 
 
 def main():
