@@ -29,22 +29,20 @@ def get_config(path):
     return cfg
 
 
-def get_config_section(_config, section=None):
+def get_config_section(_config, section):
     """returns the config in a special section as dict"""
     defaults = _config.defaults()
-    if section:
-        section_dict = {}
-        if _config.has_section(section):
-            for option in _config.options(section):
-                if option in defaults:
-                    continue
-                values = [
-                    v for v in _config.get(section, option).splitlines() if v.strip()
-                ]
-                if len(values):
-                    section_dict[option] = values
-        return section_dict
-    return _config
+    section_dict = {}
+    if _config.has_section(section):
+        for option in _config.options(section):
+            if option in defaults:
+                continue
+            values = [
+                v for v in _config.get(section, option).splitlines() if v.strip()
+            ]
+            if len(values):
+                section_dict[option] = values
+    return section_dict
 
 
 def get_sinks(conf):

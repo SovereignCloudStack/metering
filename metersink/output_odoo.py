@@ -15,6 +15,7 @@ from metersink.lib import (
 
 LOG = logging.getLogger(__name__)
 
+
 def get_client(odoo, client="common"):
     """returns the client"""
     if "url" in odoo:
@@ -80,22 +81,22 @@ def get_projection_dict(model=None, limit=None) -> dict:
 
     elif model == "res.partner":
         projection_dict["fields"] = [
-                "active",
-                "category_id",
-                "id",
-                "comment",
-                "company_name",
-                "currency_id",
-                "customer_rank",
-                "employee",
-                "invoice_ids",
-                "is_company",
-                "name",
-                "parent_id",
-                "phone",
-                "sale_order_ids",
-                "sla_ids",
-            ]
+            "active",
+            "category_id",
+            "id",
+            "comment",
+            "company_name",
+            "currency_id",
+            "customer_rank",
+            "employee",
+            "invoice_ids",
+            "is_company",
+            "name",
+            "parent_id",
+            "phone",
+            "sale_order_ids",
+            "sla_ids",
+        ]
 
     return projection_dict
 
@@ -116,18 +117,18 @@ def odoo_get(odoo, model,
         creation_dict = o_filter.copy()
         o_filter = get_filter_list(o_filter)
 
-    if mode == "records": # returns records
+    if mode == "records":  # returns records
         mode = "search_read"
-    elif mode == "fields": # returns the records fields
+    elif mode == "fields":  # returns the records fields
         mode = "fields_get"
         projection_dict = {"attributes": ["string", "help", "type"]}
-    elif mode == "ids": # returns the records ids
+    elif mode == "ids":  # returns the records ids
         mode = "search"
-    elif mode == "rights": # returns rights on the records
+    elif mode == "rights":  # returns rights on the records
         mode = "check_access_rights"
-    elif mode == "read": # returns records from ids
+    elif mode == "read":  # returns records from ids
         pass
-    elif mode == "count": # returns the amount of records
+    elif mode == "count":  # returns the amount of records
         mode = "search_count"
 
     models = get_client(odoo, client="models")
@@ -169,6 +170,28 @@ def odoo_get(odoo, model,
     return records
 
 
+def odoo_get_one(odoo, model,
+                 mode="ids",
+                 o_filter=None,
+                 projection_dict=None,
+                 create=False
+                 ):
+    """returns a single record"""
+    if projection_dict:
+        projection_dict['limit'] = 1
+    else:
+        projection_dict = {"limit": 1}
+
+    records = odoo_get(odoo, model,
+                       mode=mode,
+                       o_filter=o_filter,
+                       projection_dict=projection_dict,
+                       create=create)
+    if records:
+        return records[0]
+    return None
+
+
 def odoo_get_contact_from_tag(odoo, tag_list, limit=None) -> list:
     """is looking for a res partner, that has special tags"""
     filter_list = [
@@ -198,6 +221,7 @@ def get_sale_orders(odoo, mode="ids", filter_list=None, projection_dict=None):
         projection_dict=projection_dict,
     )
     return sale_orders
+
 
 def odoo_create(odoo, model, record_list):
     """
@@ -270,7 +294,7 @@ def setup_odoo_object(url, odoo_settings, settings_position):
         "db": odoo_settings["odoo_db"][settings_position],
         "user_name": odoo_settings["odoo_user_name"][settings_position],
         "password": odoo_settings["odoo_api_key"][settings_position],
-        }
+    }
     odoo["user_id"] = get_odoo_user_id(odoo)
     return odoo
 
@@ -278,11 +302,11 @@ def setup_odoo_object(url, odoo_settings, settings_position):
 def create_sale_order(odoo, customer, tag_list):
     """creates a new SO for customer with tags"""
     record_list = [
-                {
-                    "partner_id": customer['id'],
-                    "category_ids": tag_list
-                }
-            ]
+        {
+            "partner_id": customer['id'],
+            "category_ids": tag_list
+        }
+    ]
     new_id = odoo_create(odoo, "sale.order", record_list)
     return new_id
 
@@ -308,20 +332,20 @@ def get_sale_order_id(odoo, tag_list):
     """
     # project_tag = f"project={project_id}"
 
-    [customer] = odoo_get_contact_from_tag(odoo,tag_list, limit=1)
+    [customer] = odoo_get_contact_from_tag(odoo, tag_list, limit=1)
     if customer:
-        LOG.debug("%s",pformat(customer))
-        LOG.debug("%s",customer["sale_order_ids"])
+        LOG.debug("%s", pformat(customer))
+        LOG.debug("%s", customer["sale_order_ids"])
 
         if LOG.isEnabledFor(logging.DEBUG):
             show_sale_order_fields(odoo)
         filter_list = [
-            #"|",
-            ["customer_id" , "=", customer["id"]],
-            #["category_ids", "=", project_tag]
+            # "|",
+            ["customer_id", "=", customer["id"]],
+            # ["category_ids", "=", project_tag]
         ]
-        projection_dict = get_projection_dict()
-        [sale_order_id] = odoo_get(
+        projection_dict = get_projection_dict(limit=1)
+        sale_order_id = odoo_get_one(
             odoo,
             "sale.order",
             mode="ids",
@@ -336,7 +360,7 @@ def get_sale_order_id(odoo, tag_list):
     return None
 
 
-def get_filter_list(data:dict) -> list:
+def get_filter_list(data: dict) -> list:
     """
     returns a filter list object for odoo from a dict
     """
@@ -361,7 +385,7 @@ def get_sale_order_lines(odoo, o_filter, create=False, limit=None):
         o_filter=o_filter,
         projection_dict=projection_dict,
         create=create
-        )
+    )
 
     return line_records
 
@@ -374,18 +398,17 @@ def get_sale_order_line(odoo, o_filter, create=False):
 
 def get_product_id(odoo, product_name, create=True):
     """this is looking for the corresponding product_id in odoo"""
-    product_id = odoo_get(odoo,
-                          "res.product",
-                          mode="ids",
-                          o_filter=[["display_name", "=", product_name]],
-                          projection_dict={"limit": 1},
-                          )
+    product_id = odoo_get_one(odoo,
+                              "res.product",
+                              mode="ids",
+                              o_filter=[["display_name", "=", product_name]],
+                              )
     if not product_id and create:
         product_id = odoo_create(odoo, "res.product", [
             {"display_name": product_name}
         ])
     else:
-        LOG.debug("There is no product %s",product_name)
+        LOG.debug("There is no product %s", product_name)
     return product_id
 
 
@@ -450,20 +473,14 @@ def odoo_handle_os_resource(odoo, data):
     )
 
     info_dict = {
-            "uuid": data["traits"]["resource_id"],
-            "name": data["traits"]["display_name"],
-            "values": value_list,
-            "start": data["traits"]["created_at"],
-            "end": end_date,
-        }
+        "uuid": data["traits"]["resource_id"],
+        "name": data["traits"]["display_name"],
+        "values": value_list,
+        "start": data["traits"]["created_at"],
+        "end": end_date,
+    }
     display_name = get_name_from_info(info_dict)
 
-    # filter_list = [
-    #             [
-    #                 ["order_id", "=", sale_order_id],
-    #                 ["product_id", "=", product_id],
-    #             ]
-    #         ]
     o_filter = {
         "order_id": sale_order_id,
         "prodict_id": product_id,
@@ -558,7 +575,7 @@ def show_fields(odoo, model):
     for debugging purpose
     """
     LOG.debug(
-        "%s %s", model ,pformat(
+        "%s %s", model, pformat(
             odoo_get(odoo, model, mode="fields")
         )
     )
