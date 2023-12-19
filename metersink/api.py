@@ -18,7 +18,6 @@ def _init_logger():
 _init_logger()
 LOG = logging.getLogger(NAME)
 
-CONFIG = None
 
 def push_to_sinks(conf, data):
     """puts received metering data to the configured billing sinks"""
@@ -48,13 +47,13 @@ def process_json():
     LOG.debug("json_body: %s", pformat(json_data))
     data = json.loads(request.data)
     for message in data:
-        push_to_sinks(CONFIG, message)
+        push_to_sinks(app.config['conf'], message)
     return json_data, 202
 
 
 def main():
     """the main function"""
-    global CONFIG
+    # global CONFIG
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--config",
@@ -70,12 +69,17 @@ def main():
         help="increase output verbosity",
     )
     args = parser.parse_args()
-    if args.verbose:
+
+    config = get_config(args.config_file)
+    app.config['conf'] = config
+
+    if args.verbose or config.get("DEFAULT", "log_level") == "DEBUG":
         LOG.setLevel(logging.DEBUG)
         logging.getLogger("metersink.lib").setLevel(logging.DEBUG)
 
-    CONFIG = get_config(args.config_file)
+
     logging.info("starting the billing api server")
+
     app.run(
         port=8088,
         debug=True,
