@@ -458,12 +458,6 @@ def odoo_handle_os_resource(odoo, data):
         }
     display_name = get_name_from_info(info_dict)
 
-    # filter_list = [
-    #             [
-    #                 ["order_id", "=", sale_order_id],
-    #                 ["product_id", "=", product_id],
-    #             ]
-    #         ]
     o_filter = {
         "order_id": sale_order_id,
         "prodict_id": product_id,

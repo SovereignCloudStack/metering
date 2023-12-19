@@ -26,12 +26,12 @@ def push_to_sinks(conf, data):
     LOG.debug("pushing to sinks: %s", sinks)
     for sink_type, sink_values in sinks.items():
         if sink_type == "file":
-            for index, sink_name in enumerate(sinks["file"]["name"]):
+            for sink_name in sink_values["name"]:
                 # maybe we want to differ between events and polls here
                 # for now we put all incoming into the file
                 output_file(sink_name, data)
         elif sink_type == "odoo":
-            odoo_handle(sinks['odoo'], conf, data)
+            odoo_handle(sink_values, conf, data)
 
 
 @app.route("/post_json", methods=["POST"])
@@ -53,7 +53,6 @@ def process_json():
 
 def main():
     """the main function"""
-    # global CONFIG
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--config",
