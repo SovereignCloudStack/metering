@@ -26,6 +26,7 @@ def get_client(odoo, client="common"):
     client = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/{client}")
     return client
 
+
 def get_odoo_version(url):
     """gets the odoo version"""
     try:
@@ -35,6 +36,7 @@ def get_odoo_version(url):
     except xmlrpc.client.ProtocolError:
         LOG.exception("failed to obtain odoo version")
     return None
+
 
 def get_projection_dict(model=None, limit=None) -> dict:
     """Provides mapping for viewable fields based on their model."""
@@ -97,34 +99,50 @@ def get_projection_dict(model=None, limit=None) -> dict:
 
     return projection_dict
 
-def odoo_get(odoo, model, mode="ids", filter_list=None, projection_dict=None):
+
+def odoo_get(odoo, model,
+             mode="ids",
+             o_filter=None,
+             projection_dict=None,
+             create=False,
+             ):
     """
     returns matching records
     """
+    creation_dict = None
+    if not o_filter:
+        o_filter = [[]]
+    elif isinstance(o_filter, dict):
+        creation_dict = o_filter.copy()
+        o_filter = get_filter_list(o_filter)
 
-    if not filter_list:
-        filter_list = [[]]
-
-    if mode == "records":
+    if mode == "records": # returns records
         mode = "search_read"
-    elif mode == "fields":
+    elif mode == "fields": # returns the records fields
         mode = "fields_get"
         projection_dict = {"attributes": ["string", "help", "type"]}
-    elif mode == "ids":
+    elif mode == "ids": # returns the records ids
         mode = "search"
-    elif mode == "rights":
+    elif mode == "rights": # returns rights on the records
         mode = "check_access_rights"
-    elif mode == "read":
+    elif mode == "read": # returns records from ids
         pass
+    elif mode == "count": # returns the amount of records
+        mode = "search_count"
 
     models = get_client(odoo, client="models")
 
     # todo make that less ugly
     if not projection_dict:
         records = models.execute_kw(
-            odoo["db"], odoo["user_id"], odoo["password"], model, mode, filter_list
+            odoo["db"],
+            odoo["user_id"],
+            odoo["password"],
+            model,
+            mode,
+            o_filter,
         )
-        # projection_dict = {}
+
     else:
         records = models.execute_kw(
             odoo["db"],
@@ -132,10 +150,24 @@ def odoo_get(odoo, model, mode="ids", filter_list=None, projection_dict=None):
             odoo["password"],
             model,
             mode,
-            filter_list,
+            o_filter,
             projection_dict,
         )
+
+    if not records and creation_dict and create:
+        records = [odoo_create(odoo, model, [creation_dict])]
+        if mode == "search_read":
+            records = models.execute_kw(
+                odoo["db"],
+                odoo["user_id"],
+                odoo["password"],
+                model,
+                "read",
+                [records],
+                projection_dict,
+            )
     return records
+
 
 def odoo_get_contact_from_tag(odoo, tag_list, limit=None) -> list:
     """is looking for a res partner, that has special tags"""
@@ -153,6 +185,7 @@ def odoo_get_contact_from_tag(odoo, tag_list, limit=None) -> list:
         LOG.debug("found contact: %s", pformat(contact_list))
     return contact_list
 
+
 def get_sale_orders(odoo, mode="ids", filter_list=None, projection_dict=None):
     """
     returns SOs by filter
@@ -161,7 +194,7 @@ def get_sale_orders(odoo, mode="ids", filter_list=None, projection_dict=None):
         odoo,
         "sale.order",
         mode=mode,
-        filter_list=filter_list,
+        o_filter=filter_list,
         projection_dict=projection_dict,
     )
     return sale_orders
@@ -175,6 +208,7 @@ def odoo_create(odoo, model, record_list):
         odoo["db"], odoo["user_id"], odoo["password"], model, "create", record_list
     )
     return record_id
+
 
 def odoo_update(odoo, model, record_id, data_dict):
     """
@@ -196,6 +230,7 @@ def odoo_update(odoo, model, record_id, data_dict):
     )
     return record_id
 
+
 def get_odoo_user_id(odoo):
     """
     Takes the odoo config and tries to claim the user_id from the odoo user
@@ -210,6 +245,7 @@ def get_odoo_user_id(odoo):
         LOG.exception("failed to get user ID from odoo")
     return None
 
+
 def get_odoo_partner(odoo, filter_list=None, projection_dict=None):
     """
     returns a res.partner record
@@ -221,10 +257,11 @@ def get_odoo_partner(odoo, filter_list=None, projection_dict=None):
     partner = odoo_get(
         odoo, "res.partner",
         mode="records",
-        filter_list=filter_list,
+        o_filter=filter_list,
         projection_dict=projection_dict
     )
     return partner
+
 
 def setup_odoo_object(url, odoo_settings, settings_position):
     """returns odoo client information"""
@@ -237,6 +274,7 @@ def setup_odoo_object(url, odoo_settings, settings_position):
     odoo["user_id"] = get_odoo_user_id(odoo)
     return odoo
 
+
 def create_sale_order(odoo, customer, tag_list):
     """creates a new SO for customer with tags"""
     record_list = [
@@ -247,6 +285,7 @@ def create_sale_order(odoo, customer, tag_list):
             ]
     new_id = odoo_create(odoo, "sale.order", record_list)
     return new_id
+
 
 def create_sale_order_line(odoo, order_id, product_id, display_name, product_uom_qty):
     """creates a new so line and returns its id"""
@@ -260,6 +299,7 @@ def create_sale_order_line(odoo, order_id, product_id, display_name, product_uom
     ]
     new_id = odoo_create(odoo, "Sale.order.line", record_list)
     return new_id
+
 
 def get_sale_order_id(odoo, tag_list):
     """
@@ -285,7 +325,7 @@ def get_sale_order_id(odoo, tag_list):
             odoo,
             "sale.order",
             mode="ids",
-            filter_list=filter_list,
+            o_filter=filter_list,
             projection_dict=projection_dict,
         )
 
@@ -295,26 +335,49 @@ def get_sale_order_id(odoo, tag_list):
         return sale_order_id
     return None
 
-def get_sale_order_line(odoo, filter_list, create=True):
-    """returns a so line"""
-    line_record = odoo_get(
-            odoo,
-            "sale.order.line",
-            mode="search_read",
-            filter_list=filter_list,
+
+def get_filter_list(data:dict) -> list:
+    """
+    returns a filter list object for odoo from a dict
+    """
+    filter_list = []
+    for key, value in data.items():
+        sub_list = [key, "=", value]
+        filter_list.append(sub_list)
+
+    return [filter_list]
+
+
+def get_sale_order_lines(odoo, o_filter, create=False, limit=None):
+    """returns sale order lines"""
+    projection_dict = None
+    if limit:
+        projection_dict = {"limit": limit}
+
+    line_records = odoo_get(
+        odoo,
+        "sale.order.line",
+        mode="records",
+        o_filter=o_filter,
+        projection_dict=projection_dict,
+        create=create
         )
-    if not line_record and create:
-        line_record = odoo_create(odoo, "sale.order.line", [
-            {}
-        ])
-    return line_record
+
+    return line_records
+
+
+def get_sale_order_line(odoo, o_filter, create=False):
+    """returns a single sale_order_line"""
+    sale_order_lines = get_sale_order_lines(odoo, o_filter, create=create, limit=1)
+    return sale_order_lines[0]
+
 
 def get_product_id(odoo, product_name, create=True):
     """this is looking for the corresponding product_id in odoo"""
     product_id = odoo_get(odoo,
                           "res.product",
                           mode="ids",
-                          filter_list=[["display_name", "=", product_name]],
+                          o_filter=[["display_name", "=", product_name]],
                           projection_dict={"limit": 1},
                           )
     if not product_id and create:
@@ -324,6 +387,7 @@ def get_product_id(odoo, product_name, create=True):
     else:
         LOG.debug("There is no product %s",product_name)
     return product_id
+
 
 def is_supported() -> tuple:
     """
@@ -338,6 +402,7 @@ def is_supported() -> tuple:
     ]
     supported_resources = tuple(supported_resource_list)
     return supported_resources
+
 
 def odoo_handle_os_resource(odoo, data):
     """
@@ -393,14 +458,18 @@ def odoo_handle_os_resource(odoo, data):
         }
     display_name = get_name_from_info(info_dict)
 
-    filter_list = [
-                [
-                    ["order_id", "=", sale_order_id],
-                    ["product_id", "=", product_id],
-                ]
-            ]
+    # filter_list = [
+    #             [
+    #                 ["order_id", "=", sale_order_id],
+    #                 ["product_id", "=", product_id],
+    #             ]
+    #         ]
+    o_filter = {
+        "order_id": sale_order_id,
+        "prodict_id": product_id,
+    }
 
-    line_record = get_sale_order_line(odoo, filter_list, create=False)
+    line_record = get_sale_order_line(odoo, o_filter, create=False)
     if line_record:
         # we are reading the last state of the line and
         # calculate the time between this line and the update message.
@@ -423,6 +492,7 @@ def odoo_handle_os_resource(odoo, data):
                                          time_calc,
                                          )
         LOG.debug("%s", line_id)
+
 
 def odoo_handle(odoo_sinks, conf, data):
     """
@@ -481,6 +551,7 @@ def odoo_handle(odoo_sinks, conf, data):
             # disk.device.write.latency
             # disk.device.write.requests
 
+
 ### debug helper functions ####################################################
 def show_fields(odoo, model):
     """
@@ -491,6 +562,7 @@ def show_fields(odoo, model):
             odoo_get(odoo, model, mode="fields")
         )
     )
+
 
 def show_sale_order_fields(odoo):
     """
