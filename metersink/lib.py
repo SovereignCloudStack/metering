@@ -17,6 +17,7 @@ def dump_config(cfg):
         for option in cfg[section]:
             LOG.debug("[%s]  %s = %s", section, option, cfg.get(section, option))
 
+
 def get_config(path):
     """
     retrieves the config from the config file
@@ -26,6 +27,7 @@ def get_config(path):
     cfg.read_file(open(path))
     dump_config(cfg)
     return cfg
+
 
 def get_config_section(_config, section=None):
     """returns the config in a special section as dict"""
@@ -44,6 +46,7 @@ def get_config_section(_config, section=None):
         return section_dict
     return _config
 
+
 def get_sinks(conf):
     """returns the configured sinks from the settings"""
     section = "output"
@@ -61,6 +64,7 @@ def get_sinks(conf):
 
     return output_dict
 
+
 def get_time(param):
     """returns a timestamp now, start or end of the current month"""
     if param == "month_start":
@@ -72,6 +76,7 @@ def get_time(param):
         _time = datetime.now()
     return _time
 
+
 def calculate_cloud_time(value1, value2=None):
     """returns the time between value1 and now or value2 in minutes"""
     if not value2:
@@ -80,6 +85,7 @@ def calculate_cloud_time(value1, value2=None):
     delta = value2 - datetime.strptime(value1, "%Y-%m-%dT%H:%M:%S")
     value = int(round(delta.total_seconds() / 60))
     return value
+
 
 def parse_so_line_name(text):
     """
@@ -91,12 +97,14 @@ def parse_so_line_name(text):
     data_dict = re.search(pattern, text)
     return data_dict
 
+
 def get_info_from_name(display_name):
     """
     returns some dict like object, created from the so display_name
     """
     data_dict = parse_so_line_name(display_name)
     return data_dict
+
 
 def get_name_from_info(info) -> str:
     """
@@ -107,6 +115,7 @@ def get_name_from_info(info) -> str:
                     f"({info['values']})\n"
                     f"{info['start']} - {info['end']}")
     return display_name
+
 
 def message_to_dict(message) -> dict:
     """turns the ceilometer message into a python dict"""
